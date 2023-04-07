@@ -1,8 +1,11 @@
-use clap::{Command, Arg, ArgMatches}; 
-use std::path::PathBuf;
+use clap::{Command, Arg};
+use std::{path::PathBuf};
+
+use pixelsort::functions::*;
 
 
-fn main() {
+
+fn main()  {
 
     // Argument Parsing
     let args = Command::new("pixel-sort")
@@ -30,6 +33,8 @@ fn main() {
               displaying the help information from --help or -h")
         .get_matches();
 
-    let image_file = args.get_one::<std::path::PathBuf>("image-in");
+    let _pixels_array = PixelArray::from_path(args.get_one::<PathBuf>("image-in").unwrap());
 
+
+    ()
 }
