@@ -1,5 +1,5 @@
 use clap::{Command, Arg};
-use std::{path::PathBuf};
+use std::{path::Path, ops::Deref};
 
 use pixelsort::functions::*;
 
@@ -32,8 +32,17 @@ fn main()  {
         .after_help("Longer explanation to appear after the options when \
               displaying the help information from --help or -h")
         .get_matches();
+    let test_file = "./src/test_files/multi_pixel.png";
+    let pixel_array = PixelArray::from_path(&Path::new(test_file).to_path_buf());
+    let mut p_array = pixel_array.pixels();
+    p_array.sort_unstable();
+    
+    
+    //let elems = pa.width * pa.height;
+    //let mut npixels: Vec<NormalizedPixel> = Vec::from(pa.pixels());
+    //for i in 0..elems {
 
-    let _pixels_array = PixelArray::from_path(args.get_one::<PathBuf>("image-in").unwrap());
+    //}
 
 
     ()

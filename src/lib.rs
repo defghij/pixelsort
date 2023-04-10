@@ -1,37 +1,66 @@
 pub mod functions {
     use std::{path::PathBuf};
+    use std::cmp::Ordering;
 
+    #[derive(Debug, Clone)]
     pub struct NormalizedPixel {
         pub pixel: Vec<u8>,
-        pub norm: u64
-    } impl NormalizedPixel {
-        pub fn from_pixel(pixel: Vec<u8>) -> NormalizedPixel {
-            if pixel.len() != 3 {
-                panic!("Invalid vector for 3d norm!");
+        pub norm: f32
+    } impl From<Vec<u8>> for NormalizedPixel {
+        fn from(pixel: Vec<u8>) -> Self {
+            if pixel.len() < 3  || 4 < pixel.len() {
+                panic!("Invalid vector for pixel! Expected a vector of length 3 or 4, found {}", pixel.len());
             }
-            let x = pixel[0];
-            let y = pixel[1];
-            let z = pixel[2];
-            let norm = (( (x as u64).pow(2) + (y as u64).pow(2) + (z as u64).pow(2) ) as f64).sqrt() as u64;
-            NormalizedPixel { pixel, norm  }
+            let mut norm: u32 = 0;
+            for comp in pixel.iter() {
+                norm = norm + (*comp as u32).pow(2);
+            }
+            let norm = (norm as f32).sqrt();
+            NormalizedPixel { pixel, norm }
         }
-    }
+        
+    } impl PartialOrd for NormalizedPixel {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            self.norm.partial_cmp(&other.norm)
+        }
+    } impl Ord for NormalizedPixel {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.norm.total_cmp(&other.norm)
 
+            
+        }
+    } impl PartialEq for NormalizedPixel {
+        fn eq(&self, other: &Self) -> bool {
+            self.cmp(&other).is_eq()
+        }
+    } impl Eq for NormalizedPixel {}
+
+
+   #[allow(dead_code)]
     pub struct PixelArray {
-        height: usize,
-        width: usize,
-        pixels: Box<Vec<u8>>,
+        pub height: usize,
+        pub width: usize,
+        pixels: Box<Vec<NormalizedPixel>>,
         pixel_stride: usize
     } impl PixelArray {
         pub fn from_path(path: &PathBuf) -> PixelArray {
             let img_buf = image::io::Reader::open(path).expect("Failed to open image")
                                         .decode().expect("Failed to decode image")
-                                        .into_rgb8();
+                                        .into_rgba8();
+
+            let pixel_dimensions = 4;
             let dim = img_buf.dimensions();
             let width = dim.0 as usize;
             let height = dim.1 as usize;
-            let pixels = Box::new(img_buf.into_raw());
-            let pixel_stride = 3;
+            let vector = img_buf.into_raw();
+            let mut pixels: Vec<NormalizedPixel> = Vec::with_capacity(vector.len() / pixel_dimensions); // MAGIC NUMBER
+            for i in 0..pixels.capacity() {
+                let pixel: Vec<u8> = vector[(i * 4).. (4 * i + 4)].to_vec();
+                pixels.push(NormalizedPixel::from(pixel));
+            }
+            let pixels: Box<Vec<NormalizedPixel>> = Box::new(pixels);
+
+            let pixel_stride: usize= 4;
             PixelArray { 
                 height,
                 width,
@@ -40,19 +69,18 @@ pub mod functions {
             }                            
 
         }
-        pub fn pixels(self) -> Box<Vec<u8>>{
-            self.pixels
+        pub fn pixels(self) -> Box<Vec<NormalizedPixel>>{
+            self.pixels.clone()
         }
 
-        pub fn pixel(&self, w: usize, h: usize) -> Vec<u8> {
-            let index = (self.width * h + w) * self.pixel_stride;
-            println!("{}", index);
-            self.pixels[index..(index + self.pixel_stride)].to_vec().clone()
+        pub fn pixel(&self, w: usize, h: usize) -> NormalizedPixel {
+            let index = self.width * h + w;
+            self.pixels[index].clone()
         }
-    }
-
+    }   
 
     pub fn bitonic_sort(list: &mut Vec<u8>) -> &Vec<u8> {
+        println!("{:?}", list);
         unimplemented!("Not Implemented Yet!");
     }
 }
@@ -68,38 +96,108 @@ mod pixel_tests {
         let pixel_array = PixelArray::from_path(&Path::new(test_file).to_path_buf());
         let img_buf = image::io::Reader::open(test_file).expect("Failed to open image")
                                     .decode().expect("Failed to decode image")
-                                    .into_rgb8();
+                                    .into_rgba8();
 
         // Transparent (0,0)
         for w in 0..800 {
             for h in 0..800 {
                 let p1 = pixel_array.pixel(w,h);
                 let p2 = img_buf.get_pixel(w as u32, h as u32);
-                assert_eq!(p1[0], p2[0]);
-                assert_eq!(p1[1], p2[1]);
-                assert_eq!(p1[2], p2[2]);
+                assert_eq!(p1.pixel[0], p2[0]);
+                assert_eq!(p1.pixel[1], p2[1]);
+                assert_eq!(p1.pixel[2], p2[2]);
             }
         }
     }
-    /*
+
     #[test]
-    fn bitonic_sort_small() {
-        let mut list: Vec<u8>= vec![7,6,5,4,0,1,2,3];
+    fn euclidean_norm_test() {
+        let test_vectors: Vec<Vec<u8>>= vec![vec![255,255,255], vec![197,17,23] ];
+        let expected_values: Vec<f32> = vec![441.67294, 199.06532];
+        for test_set in test_vectors.iter().zip(expected_values.iter()){
+            let (test_vector, expected_value) = test_set;
+            let npixel  = NormalizedPixel::from(test_vector.clone());
+            assert_eq!(npixel.norm, *expected_value);
 
-        assert_eq!(*bitonic_sort(&mut list), [0,1,2,3,4,5,6,7]);
-
+        }
     }
-    */
+
+    #[test]
+    fn normalized_pixel_ord() {
+        for i in 0..10 {
+            for j in 0..10 {
+                for k in 0..10 {
+
+                    let p1 = NormalizedPixel::from( vec![i, j, k ]); 
+                    let p2 = NormalizedPixel::from( vec![i, j, k + 1] );
+                    assert!(p1.norm < p2.norm);
+                    assert!( p1 < p2);
+
+                    let p1 = NormalizedPixel::from( vec![i, j, k ]); 
+                    let p2 = NormalizedPixel::from( vec![i, j + 1, k] );
+                    assert!(p1.norm < p2.norm);
+                    assert!( p1 < p2);
+
+                    let p1 = NormalizedPixel::from( vec![i, j, k ]); 
+                    let p2 = NormalizedPixel::from( vec![i + 1, j, k] );
+                    assert!(p1.norm < p2.norm);
+                    assert!( p1 < p2);
+                }
+            }
+        }
+    }
+    
+    #[test]
+    fn normalized_pixel_eq() {
+        for i in 0..10 {
+            for j in 0..10 {
+                for k in 0..10 {
+
+                    let p1 = NormalizedPixel::from( vec![ i, j, k ] ); 
+                    let p2 = NormalizedPixel::from( vec![ i, j, k ] );
+                    assert_eq!(p1.norm, p2.norm);
+                    assert_eq!(p1, p2);
+
+                    let p1 = NormalizedPixel::from( vec![ i    , j, k ]); 
+                    let p2 = NormalizedPixel::from( vec![ i + 1, j, k ]);
+                    assert_ne!(p1.norm, p2.norm);
+                    assert_ne!(p1, p2);
+
+                    let p1 = NormalizedPixel::from( vec![ i, j    , k ]); 
+                    let p2 = NormalizedPixel::from( vec![ i, j + 1, k ] );
+                    assert_ne!(p1.norm, p2.norm);
+                    assert_ne!(p1, p2);
+
+                    let p1 = NormalizedPixel::from( vec![ i, j, k    ] ); 
+                    let p2 = NormalizedPixel::from( vec![ i, j, k + 1] );
+                    assert_ne!(p1.norm, p2.norm);
+                    assert_ne!(p1, p2);
+
+
+                }
+            }
+        }
+    }
+
     #[test]
     fn sort_three_pixels() {
-        let test_file = "./src/test_files/multi_pixel.png";
-        let pixel_array = PixelArray::from_path(&Path::new(test_file).to_path_buf());
-        let p0 = NormalizedPixel::from_pixel(pixel_array.pixel(338, 65));  //   0,   0,   0
-        let p1 = NormalizedPixel::from_pixel(pixel_array.pixel(345, 72));  // 255, 255, 255
-        let p2 = NormalizedPixel::from_pixel(pixel_array.pixel(346, 205)); //   0,   0, 255
-        let mut v = vec![p0.norm, p1.norm, p2.norm];
-        v.sort();
-        assert_eq!(v, [p0.norm, p2.norm, p1.norm]);
+        let p0 = NormalizedPixel::from( vec![0  ,0  ,255] );
+        let p1 = NormalizedPixel::from( vec![0  ,255,255] ); 
+        let p2 = NormalizedPixel::from( vec![255,255,255] );
+        let ev = vec![&p0, &p1, &p2];
+        
+        let mut test_vectors = vec![
+            vec![&p0, &p1, &p2],
+            vec![&p0, &p2, &p1],
+            vec![&p1, &p2, &p0],
+            vec![&p1, &p0, &p2],
+            vec![&p2, &p1, &p0],
+            vec![&p2, &p0, &p1],
+        ];
+        for tv in test_vectors.iter_mut() {
+            tv.sort();
+            assert_eq!(*tv, ev);
+        }
 
     }
 }
