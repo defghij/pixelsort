@@ -2,11 +2,20 @@ pub mod functions {
     use std::{path::PathBuf};
     use std::cmp::Ordering;
 
+
     #[derive(Debug, Clone)]
-    pub struct NormalizedPixel {
+    pub struct OrdinalPixel {
         pub pixel: Vec<u8>,
-        pub norm: f32
-    } impl From<Vec<u8>> for NormalizedPixel {
+        pub norm: f32,
+        strict: bool
+    } impl OrdinalPixel {
+
+        pub fn set_strict(&mut self, strict: bool) -> &mut Self {
+            self.strict = strict;
+            self
+        }
+
+    } impl From<Vec<u8>> for OrdinalPixel {
         fn from(pixel: Vec<u8>) -> Self {
             if pixel.len() < 3  || 4 < pixel.len() {
                 panic!("Invalid vector for pixel! Expected a vector of length 3 or 4, found {}", pixel.len());
@@ -16,31 +25,44 @@ pub mod functions {
                 norm = norm + (*comp as u32).pow(2);
             }
             let norm = (norm as f32).sqrt();
-            NormalizedPixel { pixel, norm }
+            OrdinalPixel { pixel, norm, strict: false }
         }
+
         
-    } impl PartialOrd for NormalizedPixel {
+    } impl PartialOrd for OrdinalPixel {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            self.norm.partial_cmp(&other.norm)
+            if self.strict { // Use Cosine Similarity as well.
+                self.norm.partial_cmp(&other.norm)
+            } else {
+                self.norm.partial_cmp(&other.norm)
+            }
         }
-    } impl Ord for NormalizedPixel {
+    } impl Ord for OrdinalPixel {
         fn cmp(&self, other: &Self) -> Ordering {
-            self.norm.total_cmp(&other.norm)
+            if self.strict {
+                self.norm.total_cmp(&other.norm)
+            } else {
+                self.norm.total_cmp(&other.norm)
+            }
 
             
         }
-    } impl PartialEq for NormalizedPixel {
+    } impl PartialEq for OrdinalPixel {
         fn eq(&self, other: &Self) -> bool {
-            self.cmp(&other).is_eq()
+            if self.strict {
+                self.cmp(&other).is_eq()
+            } else {
+                self.cmp(&other).is_eq()
+            }
         }
-    } impl Eq for NormalizedPixel {}
+    } impl Eq for OrdinalPixel {}
 
 
    #[allow(dead_code)]
     pub struct PixelArray {
         pub height: usize,
         pub width: usize,
-        pixels: Box<Vec<NormalizedPixel>>,
+        pixels: Box<Vec<OrdinalPixel>>,
         pixel_stride: usize
     } impl PixelArray {
         pub fn from_path(path: &PathBuf) -> PixelArray {
@@ -53,12 +75,12 @@ pub mod functions {
             let width = dim.0 as usize;
             let height = dim.1 as usize;
             let vector = img_buf.into_raw();
-            let mut pixels: Vec<NormalizedPixel> = Vec::with_capacity(vector.len() / pixel_dimensions); // MAGIC NUMBER
+            let mut pixels: Vec<OrdinalPixel> = Vec::with_capacity(vector.len() / pixel_dimensions);
             for i in 0..pixels.capacity() {
                 let pixel: Vec<u8> = vector[(i * 4).. (4 * i + 4)].to_vec();
-                pixels.push(NormalizedPixel::from(pixel));
+                pixels.push(OrdinalPixel::from(pixel));
             }
-            let pixels: Box<Vec<NormalizedPixel>> = Box::new(pixels);
+            let pixels: Box<Vec<OrdinalPixel>> = Box::new(pixels);
 
             let pixel_stride: usize= 4;
             PixelArray { 
@@ -69,15 +91,16 @@ pub mod functions {
             }                            
 
         }
-        pub fn pixels(self) -> Box<Vec<NormalizedPixel>>{
+
+        pub fn pixels(self) -> Box<Vec<OrdinalPixel>>{
             self.pixels.clone()
         }
 
-        pub fn pixel(&self, w: usize, h: usize) -> NormalizedPixel {
+        pub fn pixel(&self, w: usize, h: usize) -> OrdinalPixel {
             let index = self.width * h + w;
             self.pixels[index].clone()
         }
-    }   
+    }  
 
     pub fn bitonic_sort(list: &mut Vec<u8>) -> &Vec<u8> {
         println!("{:?}", list);
@@ -86,7 +109,7 @@ pub mod functions {
 }
 
 #[cfg(test)]
-mod pixel_tests {
+mod io_tests {
     use super::functions::*;
     use std::{path::Path};
 
@@ -109,6 +132,11 @@ mod pixel_tests {
             }
         }
     }
+}
+
+#[cfg(test)]
+mod ordering_tests {
+    use super::functions::*;
 
     #[test]
     fn euclidean_norm_test() {
@@ -116,7 +144,7 @@ mod pixel_tests {
         let expected_values: Vec<f32> = vec![441.67294, 199.06532];
         for test_set in test_vectors.iter().zip(expected_values.iter()){
             let (test_vector, expected_value) = test_set;
-            let npixel  = NormalizedPixel::from(test_vector.clone());
+            let npixel  = OrdinalPixel::from(test_vector.clone());
             assert_eq!(npixel.norm, *expected_value);
 
         }
@@ -128,18 +156,18 @@ mod pixel_tests {
             for j in 0..10 {
                 for k in 0..10 {
 
-                    let p1 = NormalizedPixel::from( vec![i, j, k ]); 
-                    let p2 = NormalizedPixel::from( vec![i, j, k + 1] );
+                    let p1 = OrdinalPixel::from( vec![i, j, k ]); 
+                    let p2 = OrdinalPixel::from( vec![i, j, k + 1] );
                     assert!(p1.norm < p2.norm);
                     assert!( p1 < p2);
 
-                    let p1 = NormalizedPixel::from( vec![i, j, k ]); 
-                    let p2 = NormalizedPixel::from( vec![i, j + 1, k] );
+                    let p1 = OrdinalPixel::from( vec![i, j, k ]); 
+                    let p2 = OrdinalPixel::from( vec![i, j + 1, k] );
                     assert!(p1.norm < p2.norm);
                     assert!( p1 < p2);
 
-                    let p1 = NormalizedPixel::from( vec![i, j, k ]); 
-                    let p2 = NormalizedPixel::from( vec![i + 1, j, k] );
+                    let p1 = OrdinalPixel::from( vec![i, j, k ]); 
+                    let p2 = OrdinalPixel::from( vec![i + 1, j, k] );
                     assert!(p1.norm < p2.norm);
                     assert!( p1 < p2);
                 }
@@ -153,23 +181,23 @@ mod pixel_tests {
             for j in 0..10 {
                 for k in 0..10 {
 
-                    let p1 = NormalizedPixel::from( vec![ i, j, k ] ); 
-                    let p2 = NormalizedPixel::from( vec![ i, j, k ] );
+                    let p1 = OrdinalPixel::from( vec![ i, j, k ] ); 
+                    let p2 = OrdinalPixel::from( vec![ i, j, k ] );
                     assert_eq!(p1.norm, p2.norm);
                     assert_eq!(p1, p2);
 
-                    let p1 = NormalizedPixel::from( vec![ i    , j, k ]); 
-                    let p2 = NormalizedPixel::from( vec![ i + 1, j, k ]);
+                    let p1 = OrdinalPixel::from( vec![ i    , j, k ]); 
+                    let p2 = OrdinalPixel::from( vec![ i + 1, j, k ]);
                     assert_ne!(p1.norm, p2.norm);
                     assert_ne!(p1, p2);
 
-                    let p1 = NormalizedPixel::from( vec![ i, j    , k ]); 
-                    let p2 = NormalizedPixel::from( vec![ i, j + 1, k ] );
+                    let p1 = OrdinalPixel::from( vec![ i, j    , k ]); 
+                    let p2 = OrdinalPixel::from( vec![ i, j + 1, k ] );
                     assert_ne!(p1.norm, p2.norm);
                     assert_ne!(p1, p2);
 
-                    let p1 = NormalizedPixel::from( vec![ i, j, k    ] ); 
-                    let p2 = NormalizedPixel::from( vec![ i, j, k + 1] );
+                    let p1 = OrdinalPixel::from( vec![ i, j, k    ] ); 
+                    let p2 = OrdinalPixel::from( vec![ i, j, k + 1] );
                     assert_ne!(p1.norm, p2.norm);
                     assert_ne!(p1, p2);
 
@@ -181,9 +209,9 @@ mod pixel_tests {
 
     #[test]
     fn sort_three_pixels() {
-        let p0 = NormalizedPixel::from( vec![0  ,0  ,255] );
-        let p1 = NormalizedPixel::from( vec![0  ,255,255] ); 
-        let p2 = NormalizedPixel::from( vec![255,255,255] );
+        let p0 = OrdinalPixel::from( vec![0  ,0  ,255] );
+        let p1 = OrdinalPixel::from( vec![0  ,255,255] ); 
+        let p2 = OrdinalPixel::from( vec![255,255,255] );
         let ev = vec![&p0, &p1, &p2];
         
         let mut test_vectors = vec![
