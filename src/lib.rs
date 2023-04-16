@@ -7,53 +7,58 @@ pub mod functions {
     pub struct OrdinalPixel {
         pub pixel: Vec<u8>,
         pub norm: f32,
-        strict: bool
     } impl OrdinalPixel {
-
-        pub fn set_strict(&mut self, strict: bool) -> &mut Self {
-            self.strict = strict;
-            self
-        }
-
-    } impl From<Vec<u8>> for OrdinalPixel {
-        fn from(pixel: Vec<u8>) -> Self {
-            if pixel.len() < 3  || 4 < pixel.len() {
-                panic!("Invalid vector for pixel! Expected a vector of length 3 or 4, found {}", pixel.len());
-            }
+        pub fn new(pixel: Vec<u8>) -> OrdinalPixel {
             let mut norm: u32 = 0;
             for comp in pixel.iter() {
                 norm = norm + (*comp as u32).pow(2);
             }
             let norm = (norm as f32).sqrt();
-            OrdinalPixel { pixel, norm, strict: false }
-        }
+            OrdinalPixel { pixel, norm }
 
-        
+        }
+    } impl From<Vec<u8>> for OrdinalPixel {
+        fn from(pixel: Vec<u8>) -> Self{
+            OrdinalPixel::new(pixel)
+        }
     } impl PartialOrd for OrdinalPixel {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            if self.strict { // Use Cosine Similarity as well.
-                self.norm.partial_cmp(&other.norm)
-            } else {
-                self.norm.partial_cmp(&other.norm)
+            match self.norm.partial_cmp(&other.norm).unwrap() {
+                Ordering::Less => {println!("LT (partial_cmp): {:?} < {:?}", self, other); return Some(Ordering::Less) },
+                Ordering::Greater => {println!("GT (partial_cmp): {:?} > {:?}", self, other); return Some(Ordering::Greater) },
+                Ordering::Equal => {
+                    for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
+                        if a == b { continue;                      } else 
+                        if a < b  { println!("GT (partial_cmp): {:?} > {:?}", self, other); return Some(Ordering::Less)    } else 
+                        if a > b  { println!("GT (partial_cmp): {:?} > {:?}", self, other); return Some(Ordering::Greater) }
+                    }
+                    println!("EQ (partial_cmp): {:?} == {:?}", self, other);
+                    Some(Ordering::Equal)
+                }
             }
         }
     } impl Ord for OrdinalPixel {
         fn cmp(&self, other: &Self) -> Ordering {
-            if self.strict {
-                self.norm.total_cmp(&other.norm)
-            } else {
-                self.norm.total_cmp(&other.norm)
+            match self.norm.partial_cmp(&other.norm).unwrap() {
+                Ordering::Less    => { println!("LT (cmp): {:?} < {:?}", self.norm, other.norm); return Ordering::Less },
+                Ordering::Greater => { println!("GT (cmp): {:?} > {:?}", self.norm, other.norm); return Ordering::Greater },
+                Ordering::Equal => {
+                    for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
+                        if a == b {println!("EQ (cmp): {:?} == {:?}", a, b); continue;                      } else 
+                        if a < b  { println!("LT (cmp): {:?} < {:?}", a, b); return Ordering::Less    } else 
+                        if a > b  { println!("GT (cmp): {:?} > {:?} is {:?}", a, b, a > b); return Ordering::Greater }
+                    }
+                    println!("EQ (cmp): {:?} == {:?}", self, other);
+                    Ordering::Equal
+                }
             }
 
             
         }
     } impl PartialEq for OrdinalPixel {
         fn eq(&self, other: &Self) -> bool {
-            if self.strict {
-                self.cmp(&other).is_eq()
-            } else {
-                self.cmp(&other).is_eq()
-            }
+            println!("EQ (eq): {:?} == {:?}", self, other);
+            self.cmp(&other).is_eq()
         }
     } impl Eq for OrdinalPixel {}
 
@@ -135,11 +140,22 @@ mod io_tests {
 }
 
 #[cfg(test)]
-mod ordering_tests {
+mod ordinality {
     use super::functions::*;
+    const MAX_SCALAR: u8 = 5;
+
+    fn lt(p1: OrdinalPixel, p2: OrdinalPixel) {
+        assert!(p1 < p2, "{:?} < {:?} is {}; returned {:?}", p1, p2, p1 < p2, p1.cmp(&p2));
+    }
+    fn gt(p1: OrdinalPixel, p2: OrdinalPixel) {
+        assert!(p1 > p2, "{:?} > {:?} is {}; returned {:?}", p1, p2, p1 > p2, p1.cmp(&p2));
+    }
+    fn eq(p1: OrdinalPixel, p2: OrdinalPixel) {
+        assert!(p1 == p2, "{:?} == {:?} is {}; returned {:?}", p1, p2, p1 == p2, p1.cmp(&p2));
+    }
 
     #[test]
-    fn euclidean_norm_test() {
+    fn euclidean_norm() {
         let test_vectors: Vec<Vec<u8>>= vec![vec![255,255,255], vec![197,17,23] ];
         let expected_values: Vec<f32> = vec![441.67294, 199.06532];
         for test_set in test_vectors.iter().zip(expected_values.iter()){
@@ -151,10 +167,71 @@ mod ordering_tests {
     }
 
     #[test]
-    fn normalized_pixel_ord() {
-        for i in 0..10 {
-            for j in 0..10 {
-                for k in 0..10 {
+    fn strong() {
+        for i in 0..MAX_SCALAR {
+            for j in 0..MAX_SCALAR {
+                for k in 0..MAX_SCALAR {
+                    let p1: OrdinalPixel = OrdinalPixel::from( vec![i, j, k ]); 
+                    let p2: OrdinalPixel = OrdinalPixel::from( vec![j, k, i ] );
+                    // Test for contradictions as well.
+                    if p1 == p2 {
+                        assert!(p1.norm == p2.norm, "{} == {} is false", p1.norm, p2.norm);
+                        for (a,b) in p1.pixel.iter().zip(p2.pixel.iter()) {
+                            assert!(a == b, "{} == {} is false", a, b);
+                        }
+                    } else 
+                    if p1 < p2 {
+                        if p1.norm == p2.norm {
+                            let v1: Vec<u8> = p1.pixel.clone();
+                            let v2: Vec<u8> = p2.pixel.clone();
+                            if v1[2] <  v2[2] {         lt(p1, p2); } else
+                            if v1[2] >  v2[2] {         gt(p1, p2); } else 
+                            if v1[2] == v2[2] {
+                                if v1[1] <  v2[1] {     lt(p1, p2); } else
+                                if v1[1] >  v2[1] {     gt(p1, p2); } else 
+                                if v1[1] == v2[1] {
+                                    if v1[0] <  v2[0] { lt(p1, p2); } else
+                                    if v1[0] >  v2[0] { gt(p1, p2); } else 
+                                    if v1[0] == v2[0] { eq(p1, p2); }
+                                }
+                            }
+                        } else 
+                        if p1.norm <  p2.norm { lt(p1, p2);  } 
+                        else
+                        { assert!(false, "{} & {} do not obey the triangle equality!", p1.norm, p2.norm)} 
+                    } else
+                    if p1 > p2 {
+                        if p1.norm == p2.norm {
+                            let v1: Vec<u8> = p1.pixel.clone();
+                            let v2: Vec<u8> = p2.pixel.clone();
+                            if v1[2] <  v2[2] {         lt(p1, p2); } else
+                            if v1[2] >  v2[2] {         gt(p1, p2); } else 
+                            if v1[2] == v2[2] {
+                                if v1[1] <  v2[1] {     lt(p1, p2); } else
+                                if v1[1] >  v2[1] {     gt(p1, p2); } else 
+                                if v1[1] == v2[1] {
+                                    if v1[0] <  v2[0] { lt(p1, p2); } else
+                                    if v1[0] >  v2[0] { gt(p1, p2); } else 
+                                    if v1[0] == v2[0] { eq(p1, p2); }
+                                }
+                            }
+                        } else 
+                        if p1.norm <  p2.norm { lt(p1, p2);  } 
+                        else
+                        { assert!(false, "{} & {} do not obey the triangle equality!", p1.norm, p2.norm)} 
+                    } else {
+                        assert!(false, "{:?} & {:?} do not obey the triangle equality!", p1, p2);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn weak() {
+        for i in 0..MAX_SCALAR {
+            for j in 0..MAX_SCALAR {
+                for k in 0..MAX_SCALAR {
 
                     let p1 = OrdinalPixel::from( vec![i, j, k ]); 
                     let p2 = OrdinalPixel::from( vec![i, j, k + 1] );
@@ -175,38 +252,6 @@ mod ordering_tests {
         }
     }
     
-    #[test]
-    fn normalized_pixel_eq() {
-        for i in 0..10 {
-            for j in 0..10 {
-                for k in 0..10 {
-
-                    let p1 = OrdinalPixel::from( vec![ i, j, k ] ); 
-                    let p2 = OrdinalPixel::from( vec![ i, j, k ] );
-                    assert_eq!(p1.norm, p2.norm);
-                    assert_eq!(p1, p2);
-
-                    let p1 = OrdinalPixel::from( vec![ i    , j, k ]); 
-                    let p2 = OrdinalPixel::from( vec![ i + 1, j, k ]);
-                    assert_ne!(p1.norm, p2.norm);
-                    assert_ne!(p1, p2);
-
-                    let p1 = OrdinalPixel::from( vec![ i, j    , k ]); 
-                    let p2 = OrdinalPixel::from( vec![ i, j + 1, k ] );
-                    assert_ne!(p1.norm, p2.norm);
-                    assert_ne!(p1, p2);
-
-                    let p1 = OrdinalPixel::from( vec![ i, j, k    ] ); 
-                    let p2 = OrdinalPixel::from( vec![ i, j, k + 1] );
-                    assert_ne!(p1.norm, p2.norm);
-                    assert_ne!(p1, p2);
-
-
-                }
-            }
-        }
-    }
-
     #[test]
     fn sort_three_pixels() {
         let p0 = OrdinalPixel::from( vec![0  ,0  ,255] );
