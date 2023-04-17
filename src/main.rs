@@ -3,7 +3,7 @@ use image::{ImageEncoder};
 use std::fs::File;
 use std::{path::{PathBuf}, ops::Deref/*, ops::Deref*/};
 
-use pixelsort::functions::*;
+use pixelsort::pixels::*;
 
 
 

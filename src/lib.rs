@@ -1,4 +1,4 @@
-pub mod functions {
+pub mod pixels {
     use std::{path::PathBuf};
     use std::cmp::Ordering;
 
@@ -24,15 +24,14 @@ pub mod functions {
     } impl PartialOrd for OrdinalPixel {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
             match self.norm.partial_cmp(&other.norm).unwrap() {
-                Ordering::Less => {println!("LT (partial_cmp): {:?} < {:?}", self, other); return Some(Ordering::Less) },
-                Ordering::Greater => {println!("GT (partial_cmp): {:?} > {:?}", self, other); return Some(Ordering::Greater) },
+                Ordering::Less    => { return Some(Ordering::Less) },
+                Ordering::Greater => { return Some(Ordering::Greater) },
                 Ordering::Equal => {
                     for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
                         if a == b { continue;                      } else 
-                        if a < b  { println!("GT (partial_cmp): {:?} > {:?}", self, other); return Some(Ordering::Less)    } else 
-                        if a > b  { println!("GT (partial_cmp): {:?} > {:?}", self, other); return Some(Ordering::Greater) }
+                        if a < b  { return Some(Ordering::Less)    } else 
+                        if a > b  { return Some(Ordering::Greater) }
                     }
-                    println!("EQ (partial_cmp): {:?} == {:?}", self, other);
                     Some(Ordering::Equal)
                 }
             }
@@ -40,15 +39,14 @@ pub mod functions {
     } impl Ord for OrdinalPixel {
         fn cmp(&self, other: &Self) -> Ordering {
             match self.norm.partial_cmp(&other.norm).unwrap() {
-                Ordering::Less    => { println!("LT (cmp): {:?} < {:?}", self.norm, other.norm); return Ordering::Less },
-                Ordering::Greater => { println!("GT (cmp): {:?} > {:?}", self.norm, other.norm); return Ordering::Greater },
+                Ordering::Less    => { return Ordering::Less },
+                Ordering::Greater => { return Ordering::Greater },
                 Ordering::Equal => {
                     for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
-                        if a == b {println!("EQ (cmp): {:?} == {:?}", a, b); continue;                      } else 
-                        if a < b  { println!("LT (cmp): {:?} < {:?}", a, b); return Ordering::Less    } else 
-                        if a > b  { println!("GT (cmp): {:?} > {:?} is {:?}", a, b, a > b); return Ordering::Greater }
+                        if a == b { continue;                } else 
+                        if a < b  { return Ordering::Less    } else 
+                        if a > b  { return Ordering::Greater }
                     }
-                    println!("EQ (cmp): {:?} == {:?}", self, other);
                     Ordering::Equal
                 }
             }
@@ -57,7 +55,6 @@ pub mod functions {
         }
     } impl PartialEq for OrdinalPixel {
         fn eq(&self, other: &Self) -> bool {
-            println!("EQ (eq): {:?} == {:?}", self, other);
             self.cmp(&other).is_eq()
         }
     } impl Eq for OrdinalPixel {}
@@ -107,15 +104,167 @@ pub mod functions {
         }
     }  
 
-    pub fn bitonic_sort(list: &mut Vec<u8>) -> &Vec<u8> {
-        println!("{:?}", list);
-        unimplemented!("Not Implemented Yet!");
+}
+
+pub mod bitonic_indices {
+    use std::cmp::Ordering;
+
+
+    /// Use the implementation found here: https://www.inf.hs-flensburg.de/lang/algorithmen/sortieren/bitonic/oddn.html
+    /// as a basis for an arbitrary n bitonic sort. Note that we want to find the indicies first so that 
+    /// we can avoid using recursion and use a sorting network (fixed comaparisons).
+    /// 
+    /// Specifically, standard bitonic sort uses a comparator network B_{p} where p is a power of 2 as the basic 
+    /// building block. We derive network Bn for arbitrary n from network B_{p} where p is the next-greatest 
+    /// power of 2 by using only the first n – p/2 comparators of B_{p}. 
+    pub fn comarison_indicies(len: i64) -> Vec<(i64, i64, Ordering)> {
+        let mut compares: Vec<(i64, i64, Ordering)> = Vec::new();
+        bitonic_sort(&mut compares, 0, len, Ordering::Greater);
+        compares
+        
+    }
+
+    fn bitonic_sort(compares: &mut Vec<(i64, i64, Ordering)>, lo: i64, n: i64, dir: Ordering) -> &mut Vec<(i64, i64, Ordering)> {
+        if n > 1 {
+            let m: i64 = n / 2;
+            let direction: Ordering = dir;
+            let opposite: Ordering = match dir {
+                Ordering::Less => Ordering::Greater,
+                Ordering::Greater => Ordering::Less,
+                Ordering::Equal => panic!("Invalid ordering for bitonic sort")
+            };
+            bitonic_sort( compares, lo,           m, opposite);
+            bitonic_sort( compares, lo + m, n-m, direction);
+            bitonic_merge(compares, lo,             n, direction);
+        }
+        compares
+    }
+
+    fn bitonic_merge(compares: &mut Vec<(i64, i64, Ordering)>, lo: i64, n: i64, dir: Ordering) -> &mut Vec<(i64, i64, Ordering)> {
+        if n > 1 {
+            let  m: i64 = greatest_power_of_two_less_than(n);
+            for i in 0..lo+n-m {
+                compares.push( (i, i+m, dir) );
+            }
+            bitonic_merge(compares, lo, m, dir);
+            bitonic_merge(compares, lo+m, n-m, dir);
+        }
+        compares
+    }
+
+    // n>=2  and  n<=Integer.MAX_VALUE
+    fn greatest_power_of_two_less_than(n: i64) -> i64 {
+        let mut k: i64 = 1;
+        while k>0 && k< n  { k <<= 1; }
+        k.rotate_right(1)
     }
 }
 
 #[cfg(test)]
-mod io_tests {
-    use super::functions::*;
+mod sorting {
+    use std::cmp::Ordering;
+
+    use super::pixels::*;
+    use super::bitonic_indices::*;
+    
+    /// Rely only on norm ordering of the vector space.
+    #[test]
+    fn weak_ordering() {
+        let p0: OrdinalPixel = OrdinalPixel::from( vec![255,   0,   0,   0] );
+        let p1: OrdinalPixel = OrdinalPixel::from( vec![255, 255,   0,   0] ); 
+        let p2: OrdinalPixel = OrdinalPixel::from( vec![255, 255, 255,   0] );
+        let p3: OrdinalPixel = OrdinalPixel::from( vec![255, 255, 255, 255] );
+        let ev = vec![&p0, &p1, &p2, &p3];
+        
+        let mut test_vectors = vec![
+            vec![&p0, &p1, &p2, &p3],
+            vec![&p1, &p2, &p3, &p0],
+            vec![&p2, &p3, &p0, &p1],
+            vec![&p3, &p0, &p1, &p2],
+            vec![&p3, &p2, &p1, &p0],
+            vec![&p2, &p1, &p0, &p3],
+            vec![&p1, &p0, &p3, &p2],
+            vec![&p0, &p3, &p2, &p1],
+            vec![&p0, &p2, &p1, &p3],
+            vec![&p2, &p1, &p3, &p0],
+            vec![&p1, &p3, &p0, &p2],
+            vec![&p3, &p0, &p2, &p1],
+            vec![&p1, &p0, &p2, &p3],
+            vec![&p0, &p2, &p3, &p1],
+            vec![&p2, &p3, &p1, &p0],
+            vec![&p3, &p1, &p0, &p2],
+        ];
+        for tv in test_vectors.iter_mut() {
+            tv.sort();
+            assert_eq!(*tv, ev);
+        }
+    }
+
+    /// Rely only on lexigraphical ordering of the vector space.
+    #[test]
+    fn strong_ordering() {
+        let p0: OrdinalPixel = OrdinalPixel::from( vec![255,   0,   0,   0] );
+        let p1: OrdinalPixel = OrdinalPixel::from( vec![0  , 255,   0,   0] ); 
+        let p2: OrdinalPixel = OrdinalPixel::from( vec![0  ,   0, 255,   0] );
+        let p3: OrdinalPixel = OrdinalPixel::from( vec![0  ,   0,   0, 255] );
+        let ev = vec![&p0, &p1, &p2, &p3];
+        
+        let mut test_vectors = vec![
+            vec![&p0, &p1, &p2, &p3],
+            vec![&p1, &p2, &p3, &p0],
+            vec![&p2, &p3, &p0, &p1],
+            vec![&p3, &p0, &p1, &p2],
+            vec![&p3, &p2, &p1, &p0],
+            vec![&p2, &p1, &p0, &p3],
+            vec![&p1, &p0, &p3, &p2],
+            vec![&p0, &p3, &p2, &p1],
+            vec![&p0, &p2, &p1, &p3],
+            vec![&p2, &p1, &p3, &p0],
+            vec![&p1, &p3, &p0, &p2],
+            vec![&p3, &p0, &p2, &p1],
+            vec![&p1, &p0, &p2, &p3],
+            vec![&p0, &p2, &p3, &p1],
+            vec![&p2, &p3, &p1, &p0],
+            vec![&p3, &p1, &p0, &p2],
+        ];
+        for tv in test_vectors.iter_mut() {
+            tv.sort();
+            assert_eq!(*tv, ev);
+        }
+    }
+
+    /// Test the indices generated by the `comparison_indices` function
+    /// which is used to precompute compare and swaps ahead of time. This
+    /// test validates the generated indices against a n=6 bitonic sorting 
+    /// network. Visually, that is:
+    ///             COMPARES
+    ///         0  1  2  3  4  5  6  7  
+    ///     0------⊛--⊛--⊛-----⊛-----⊛--
+    ///            ∆  ∆  |     |     ∇  
+    ///     1---⊛--|--⊛--|--⊛--|--⊛--⊛--
+    /// I       ∆  |     |  |  ∇  |     
+    /// N   2---⊛--⊛-----|--|--⊛--|--⊛--
+    /// P                |  |     ∇  ∇  
+    /// U   3------⊛--⊛--|--|-----⊛--⊛--
+    /// T          |  ∇  ∇  |           
+    /// S   4---⊛--|--⊛--⊛--|--------⊛--
+    ///         ∇  ∇        ∇        ∇  
+    ///     5---⊛--⊛--------⊛--------⊛--
+    /// Note that compares are only between two elements of which
+    /// are denotes with '⊛' in the direction of either '∇' or '∆'
+    #[test]
+    fn indices_of_small_sort_network() {
+        let compares: Vec<(i64, i64, Ordering)> = comarison_indicies(6);
+        for compare in compares.iter().enumerate() {
+            println!("{}: ({}, {}, {:?})",compare.0, compare.1.0, compare.1.1, compare.1.2);
+        }
+        
+    }
+}
+
+#[cfg(test)]
+mod io {
+    use super::pixels::*;
     use std::{path::Path};
 
     #[test]
@@ -141,7 +290,7 @@ mod io_tests {
 
 #[cfg(test)]
 mod ordinality {
-    use super::functions::*;
+    use super::pixels::*;
     const MAX_SCALAR: u8 = 5;
 
     fn lt(p1: OrdinalPixel, p2: OrdinalPixel) {
@@ -185,13 +334,13 @@ mod ordinality {
                             let v1: Vec<u8> = p1.pixel.clone();
                             let v2: Vec<u8> = p2.pixel.clone();
                             if v1[2] <  v2[2] {         lt(p1, p2); } else
-                            if v1[2] >  v2[2] {         gt(p1, p2); } else 
+                            if v1[2] >  v2[2] {         gt(p1, p2); } else // Shouldn't happen
                             if v1[2] == v2[2] {
                                 if v1[1] <  v2[1] {     lt(p1, p2); } else
-                                if v1[1] >  v2[1] {     gt(p1, p2); } else 
+                                if v1[1] >  v2[1] {     gt(p1, p2); } else // Shouldn't happen
                                 if v1[1] == v2[1] {
                                     if v1[0] <  v2[0] { lt(p1, p2); } else
-                                    if v1[0] >  v2[0] { gt(p1, p2); } else 
+                                    if v1[0] >  v2[0] { gt(p1, p2); } else // Shouldn't happen 
                                     if v1[0] == v2[0] { eq(p1, p2); }
                                 }
                             }
@@ -204,13 +353,13 @@ mod ordinality {
                         if p1.norm == p2.norm {
                             let v1: Vec<u8> = p1.pixel.clone();
                             let v2: Vec<u8> = p2.pixel.clone();
-                            if v1[2] <  v2[2] {         lt(p1, p2); } else
+                            if v1[2] <  v2[2] {         lt(p1, p2); } else // Shouldn't happen
                             if v1[2] >  v2[2] {         gt(p1, p2); } else 
                             if v1[2] == v2[2] {
-                                if v1[1] <  v2[1] {     lt(p1, p2); } else
+                                if v1[1] <  v2[1] {     lt(p1, p2); } else // Shouldn't happen
                                 if v1[1] >  v2[1] {     gt(p1, p2); } else 
                                 if v1[1] == v2[1] {
-                                    if v1[0] <  v2[0] { lt(p1, p2); } else
+                                    if v1[0] <  v2[0] { lt(p1, p2); } else // Shouldn't happen
                                     if v1[0] >  v2[0] { gt(p1, p2); } else 
                                     if v1[0] == v2[0] { eq(p1, p2); }
                                 }
@@ -252,25 +401,4 @@ mod ordinality {
         }
     }
     
-    #[test]
-    fn sort_three_pixels() {
-        let p0 = OrdinalPixel::from( vec![0  ,0  ,255] );
-        let p1 = OrdinalPixel::from( vec![0  ,255,255] ); 
-        let p2 = OrdinalPixel::from( vec![255,255,255] );
-        let ev = vec![&p0, &p1, &p2];
-        
-        let mut test_vectors = vec![
-            vec![&p0, &p1, &p2],
-            vec![&p0, &p2, &p1],
-            vec![&p1, &p2, &p0],
-            vec![&p1, &p0, &p2],
-            vec![&p2, &p1, &p0],
-            vec![&p2, &p0, &p1],
-        ];
-        for tv in test_vectors.iter_mut() {
-            tv.sort();
-            assert_eq!(*tv, ev);
-        }
-
-    }
 }
