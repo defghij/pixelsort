@@ -106,123 +106,197 @@ pub mod pixels {
 
 }
 
-pub mod bitonic_indices {
-    use std::cmp::Ordering;
+pub mod bitonic {
 
-    // TODO: Generic over T: PartialOrd.
-    pub fn bitonic_sort(list: &mut Vec<(i64, i64, Ordering)>, lo: i64, n: i64, dir: Ordering) {
-        if n > 1 {
-            let m: i64 = n / 2;
-            let direction: Ordering = dir;
-            let opposite: Ordering = match dir {
-                Ordering::Less => Ordering::Greater,
-                Ordering::Greater => Ordering::Less,
-                Ordering::Equal => panic!("Invalid ordering for bitonic sort")
-            };
-            bitonic_sort( list, lo,       m, opposite);
-            bitonic_sort( list, lo + m, n-m, direction);
-            bitonic_merge(list, lo,       n, direction);
-        }
-    }
-
-    #[inline]
-    fn bitonic_merge(list: &mut Vec<(i64, i64, Ordering)>, lo: i64, n: i64, dir: Ordering) {
-        if n > 1 { // Exit condition: n == 1
-            let  m: i64 = greatest_power_of_two_less_than(n);
-            for i in 0..lo+n-m {
-                if list[i as usize].cmp(&list[(i+m) as usize]) != dir {
-                    list.swap(i as usize, (i+m) as usize);
-                }
+    pub mod network {
+        use std::cmp::Ordering;
+        pub struct Node {
+            i: usize,
+            j: usize,
+            direction: Ordering
+        } impl Node {
+            pub fn new(i: usize, j: usize, direction: Ordering) -> Node {
+                Node {i, j, direction}
             }
-            bitonic_merge(list, lo, m, dir);
-            bitonic_merge(list, lo+m, n-m, dir);
+            pub fn details(&self) -> (usize, usize, Ordering) {
+                (self.i, self.j, self.direction)
+            }
         }
     }
 
+    pub mod recursive {
+        use std::cmp::Ordering;
+        use super::helper::greatest_power_of_two_less_than;
+        use super::network;
 
-    /// Use the implementation found here: https://www.inf.hs-flensburg.de/lang/algorithmen/sortieren/bitonic/oddn.htm
-    /// as a basis for an arbitrary n bitonic sort. Note that we want to find the indicies first so that 
-    /// we can avoid using recursion and use a sorting network (fixed comaparisons).
-    /// 
-    /// Specifically, standard bitonic sort uses a comparator network B_{p} where p is a power of 2 as the basic 
-    /// building block. We derive network Bn for arbitrary n from network B_{p} where p is the next-greatest 
-    /// power of 2 by using only the first n – p/2 comparators of B_{p}. 
-    pub fn calculate_indicies(len: i64) -> Vec<(i64, i64, Ordering)> {
-        let mut compares: Vec<(i64, i64, Ordering)> = Vec::new();
-        bitonic_sort_index_calculation(&mut compares, 0, len, Ordering::Greater);
-        compares
+        pub fn sort<T: PartialOrd>(list: &mut Vec<T>, lo: i64, n: i64, dir: Ordering) {
+            if n > 1 {
+                let m: i64 = n / 2;
+                let direction: Ordering = dir;
+                let opposite: Ordering = match dir {
+                    Ordering::Less => Ordering::Greater,
+                    Ordering::Greater => Ordering::Less,
+                    Ordering::Equal => panic!("Invalid ordering for bitonic sort")
+                };
+                sort( list, lo,       m, opposite);
+                sort( list, lo + m, n-m, direction);
+                merge(list, lo,       n, direction);
+            }
+        }
         
+        #[inline(always)]
+        fn merge<T: PartialOrd>(list: &mut Vec<T>, lo: i64, n: i64, dir: Ordering) {
+            if n > 1 { // Exit condition: n == 1
+                let  m: i64 = greatest_power_of_two_less_than(n);
+                for i in 0..lo+n-m {
+                    if list[i as usize].partial_cmp(&list[(i+m) as usize]).unwrap() != dir {
+                        list.swap(i as usize, (i+m) as usize);
+                    }
+                }
+                merge(list, lo, m, dir);
+                merge(list, lo+m, n-m, dir);
+            }
+        }
+
+        /// Use the implementation found here: https://www.inf.hs-flensburg.de/lang/algorithmen/sortieren/bitonic/oddn.htm
+        /// as a basis for an arbitrary n bitonic sort. Note that we want to find the indicies first so that 
+        /// we can avoid using recursion and use a sorting network (fixed comaparisons).
+        /// 
+        /// Specifically, standard bitonic sort uses a comparator network B_{p} where p is a power of 2 as the basic 
+        /// building block. We derive network Bn for arbitrary n from network B_{p} where p is the next-greatest 
+        /// power of 2 by using only the first n – p/2 comparators of B_{p}. 
+        pub fn network(len: i64) -> Vec<network::Node> {
+            let mut compares: Vec<network::Node> = Vec::new();
+            index_calculation(&mut compares, 0, len, Ordering::Greater);
+            compares
+            
+        }
+
+        /// Bitonic Sort Network generated for six input array.
+        ///             COMPARES
+        ///         0  1  2  3  4  5  6  7  
+        ///     0------⊛--⊛--⊛-----⊛-----⊛--
+        ///            ∆  ∆  |     |     ∇  
+        ///     1---⊛--|--⊛--|--⊛--|--⊛--⊛--
+        /// I       ∆  |     |  |  ∇  |     
+        /// N   2---⊛--⊛-----|--|--⊛--|--⊛--
+        /// P                |  |     ∇  ∇  
+        /// U   3------⊛--⊛--|--|-----⊛--⊛--
+        /// T          |  ∇  ∇  |           
+        /// S   4---⊛--|--⊛--⊛--|--------⊛--
+        ///         ∇  ∇        ∇        ∇  
+        ///     5---⊛--⊛--------⊛--------⊛--
+        /// Note that compares are only between two elements of which
+        /// are denotes with '⊛' in the direction of either '∇' or '∆'
+        fn index_calculation(compares: &mut Vec<network::Node>, lo: i64, n: i64, dir: Ordering) {
+            if n > 1 {
+                let m: i64 = n / 2;
+                let direction: Ordering = dir;
+                let opposite: Ordering = match dir {
+                    Ordering::Less => Ordering::Greater,
+                    Ordering::Greater => Ordering::Less,
+                    Ordering::Equal => panic!("Invalid ordering for bitonic sort")
+                };
+                index_calculation( compares, lo,       m, opposite);
+                index_calculation( compares, lo + m, n-m, direction);
+                index_calculation_merge(compares, lo,       n, direction);
+            }
+        }
+
+        #[inline(always)]
+        fn index_calculation_merge(compares: &mut Vec<network::Node>, lo: i64, n: i64, dir: Ordering) {
+            if n > 1 { // Exit condition: n == 1
+                let  m: i64 = greatest_power_of_two_less_than(n);
+                for i in 0..lo+n-m {
+                    compares.push( network::Node::new(i as usize, (i+m) as usize, dir));
+                }
+                index_calculation_merge(compares, lo, m, dir);
+                index_calculation_merge(compares, lo+m, n-m, dir);
+            }
+            /*
+            let mut x = n;
+            let mut l = lo;
+            while x > 1 {
+                let  y: i64 = greatest_power_of_two_less_than(x);
+                for i in 0..l+x-y {
+                    compares.push( (i, i+y, dir) );
+                }
+                x = y;    
+            }
+            x = n;
+            while x > 1 {
+                let  y: i64 = greatest_power_of_two_less_than(x);
+                for i in 0..l+x-y {
+                    compares.push( (i, i+y, dir) );
+                }
+                l = l + y;
+                x = x - y;    
+            }
+            */
+        }
     }
 
-    /// Bitonic Sort Network generated for six input array.
-    ///             COMPARES
-    ///         0  1  2  3  4  5  6  7  
-    ///     0------⊛--⊛--⊛-----⊛-----⊛--
-    ///            ∆  ∆  |     |     ∇  
-    ///     1---⊛--|--⊛--|--⊛--|--⊛--⊛--
-    /// I       ∆  |     |  |  ∇  |     
-    /// N   2---⊛--⊛-----|--|--⊛--|--⊛--
-    /// P                |  |     ∇  ∇  
-    /// U   3------⊛--⊛--|--|-----⊛--⊛--
-    /// T          |  ∇  ∇  |           
-    /// S   4---⊛--|--⊛--⊛--|--------⊛--
-    ///         ∇  ∇        ∇        ∇  
-    ///     5---⊛--⊛--------⊛--------⊛--
-    /// Note that compares are only between two elements of which
-    /// are denotes with '⊛' in the direction of either '∇' or '∆'
-    pub fn bitonic_sort_index_calculation(compares: &mut Vec<(i64, i64, Ordering)>, lo: i64, n: i64, dir: Ordering) {
-        if n > 1 {
-            let m: i64 = n / 2;
-            let direction: Ordering = dir;
-            let opposite: Ordering = match dir {
-                Ordering::Less => Ordering::Greater,
-                Ordering::Greater => Ordering::Less,
-                Ordering::Equal => panic!("Invalid ordering for bitonic sort")
-            };
-            bitonic_sort_index_calculation( compares, lo,       m, opposite);
-            bitonic_sort_index_calculation( compares, lo + m, n-m, direction);
-            bitonic_merge_index_calculation(compares, lo,       n, direction);
+    pub mod iterative {
+        /*use std::cmp::Ordering;*/
+
+        pub fn bitonic_sort<T: PartialOrd>(/*list: &mut Vec<T>, lo: i64, n: i64, dir: Ordering*/) {
+            unimplemented!("Iterative Bitonic Sort not available!");
+            /*
+            // Credit to: 
+            //      John Mellor-Crummy & Thomas Anastasio
+            //      https://people.cs.rutgers.edu/~venugopa/parallel_summer2012/bitonic_overview.html
+
+            void merge_up(int *arr, int n) {
+            int step=n/2,i,j,k,temp;
+            while (step > 0) {
+                for (i=0; i < n; i+=step*2) {
+                for (j=i,k=0;k < step;j++,k++) {
+                if (arr[j] > arr[j+step]) {
+                // swap
+                temp = arr[j];
+                arr[j]=arr[j+step];
+                arr[j+step]=temp;
+                }
+                }
+                }
+                step /= 2;
+            }
+            }
+
+            void merge_down(int *arr, int n) {
+            int step=n/2,i,j,k,temp;
+            while (step > 0) {
+                for (i=0; i < n; i+=step*2) {
+                for (j=i,k=0;k < step;j++,k++) {
+                if (arr[j] < arr[j+step]) {
+                // swap
+                temp = arr[j];
+                arr[j]=arr[j+step];
+                arr[j+step]=temp;
+                }
+
+            // do merges
+            for (s=2; s <= n; s*=2) { // sort power of two list (left)
+                for (i=0; i < n;) {
+                    merge_up((arr+i),s);
+                    merge_down((arr+i+s),s);
+                    i += s*2;
+                }
+            } // repeat for remaining power(s) of two list (right).
+            // merge lest left and right lists
+            */
         }
     }
 
-    #[inline]
-    fn bitonic_merge_index_calculation(compares: &mut Vec<(i64, i64, Ordering)>, lo: i64, n: i64, dir: Ordering) {
-        if n > 1 { // Exit condition: n == 1
-            let  m: i64 = greatest_power_of_two_less_than(n);
-            for i in 0..lo+n-m {
-                compares.push( (i, i+m, dir) );
-            }
-            bitonic_merge_index_calculation(compares, lo, m, dir);
-            bitonic_merge_index_calculation(compares, lo+m, n-m, dir);
-        }
-        /*
-        let mut x = n;
-        let mut l = lo;
-        while x > 1 {
-            let  y: i64 = greatest_power_of_two_less_than(x);
-            for i in 0..l+x-y {
-                compares.push( (i, i+y, dir) );
-            }
-            x = y;    
-        }
-        x = n;
-        while x > 1 {
-            let  y: i64 = greatest_power_of_two_less_than(x);
-            for i in 0..l+x-y {
-                compares.push( (i, i+y, dir) );
-            }
-            l = l + y;
-            x = x - y;    
-        }
-        */
-    }
 
+    pub mod helper{
+        // n>=2  and  n<=Integer.MAX_VALUE
+        pub fn greatest_power_of_two_less_than(n: i64) -> i64 {
+            let mut k: i64 = 1;
+            while k>0 && k< n  { k <<= 1; }
+            k.rotate_right(1)
+        }
 
-    // n>=2  and  n<=Integer.MAX_VALUE
-    fn greatest_power_of_two_less_than(n: i64) -> i64 {
-        let mut k: i64 = 1;
-        while k>0 && k< n  { k <<= 1; }
-        k.rotate_right(1)
     }
 }
 
@@ -231,7 +305,7 @@ mod sorting {
     use std::cmp::Ordering;
 
     use super::pixels::*;
-    use super::bitonic_indices::*;
+    use super::bitonic;
     
     /// Rely only on norm ordering of the vector space.
     #[test]
@@ -300,7 +374,7 @@ mod sorting {
     }
 
     #[test]
-    fn sort_using_indices() {
+    fn bitonic_recursive_indices_fixed() {
         let p0: OrdinalPixel = OrdinalPixel::from( vec![255,   0,   0,   0] );
         let p1: OrdinalPixel = OrdinalPixel::from( vec![0  , 255,   0,   0] ); 
         let p2: OrdinalPixel = OrdinalPixel::from( vec![0  ,   0, 255,   0] );
@@ -324,36 +398,26 @@ mod sorting {
             vec![&p2, &p3, &p1, &p0],
             vec![&p3, &p1, &p0, &p2],
         ];
-        let compares: Vec<(i64,i64,Ordering)> = calculate_indicies(4);
-        for tv in test_vectors.iter_mut() {
-            for compare in compares.iter() {
-                let i = compare.0 as usize;
-                let j = compare.1 as usize;
-                let direction = compare.2;
-                if tv[i].cmp(&tv[j]) != direction {
-                    tv.swap(i, j);
+        use bitonic::network::Node;
+        let network: Vec<Node> = bitonic::recursive::network(4);
+        for vector in test_vectors.iter_mut() {
+            for node in network.iter() {
+                let (i, j, direction): (usize, usize, Ordering) = node.details();
+                if vector[i].cmp(&vector[j]) != direction {
+                    vector.swap(i, j);
                 }
             }
-            assert_eq!(tv, &expected);
+            assert_eq!(vector, &expected);
         }
     }
 
     #[test]
-    fn random_sort_integers() {
+    fn bitonic_recursive_sort_random() {
         use rand::{distributions::Standard, Rng};
         for list_size in 10..=100 {
             let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
             let mut expected: Vec<u64> = test_vector.clone();
-
-            let compares: Vec<(i64,i64,Ordering)> = calculate_indicies(list_size as i64);
-            for compare in compares.iter() {
-                let i = compare.0 as usize;
-                let j = compare.1 as usize;
-                let direction = compare.2;
-                if test_vector[i].cmp(&test_vector[j]) != direction {
-                    test_vector.swap(i, j);
-                }
-            }
+            bitonic::recursive::sort(&mut test_vector, 0 as i64, list_size as i64, Ordering::Greater);
             expected.sort();
             expected.reverse();
             for (i,(x,y)) in expected.iter().zip(test_vector.iter()).enumerate(){
@@ -367,14 +431,20 @@ mod sorting {
 
     /*
     #[test]
-    fn random_sort_bitonic() {
+    fn iterative_bitonic_random() {
         use rand::{distributions::Standard, Rng};
-        for list_size in 10..=100 {
-            let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+        for list_size in 2..=4 {
+            println!("Get Indices");
+
+            let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size as usize).collect();
             let mut expected: Vec<u64> = test_vector.clone();
-            bitonic_sort(&mut test_vector, 0, test_vector.len(), Ordering::Greater);
             expected.sort();
             expected.reverse();
+
+            println!("Sort");
+            bitonic_sort(&mut test_vector, 0 as i64, list_size as i64, Ordering::Greater);
+            assert_eq!(comp_valid, comp_test);
+
             for (i,(x,y)) in expected.iter().zip(test_vector.iter()).enumerate(){
                 if x!= y {
                     println!("[{} of {}] {} != {}",i, list_size, x, y);
