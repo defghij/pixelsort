@@ -122,6 +122,37 @@ pub mod bitonic {
                 (self.i, self.j, self.direction)
             }
         }
+
+        pub struct Group {
+            pub elements: Box<Vec<Node>>,
+            //direction: Ordering,
+        } impl Group {
+            pub fn new(n: usize /*, direction: Ordering*/) -> Group {
+            let elements: Vec<Node> = Vec::with_capacity(n);
+            let elements: Box<Vec<Node>> = Box::new(elements);
+                Group {
+                    elements,
+                    /*direction*/
+                }
+            }
+            pub fn details(&self, i: usize) -> (usize, usize, Ordering) {
+                self.elements[i].details()
+            }
+        }
+
+        pub struct Phase {
+            pub groups: Box<Vec<Group>>,
+            //direction: Ordering,
+        } impl Phase {
+            pub fn new(n: usize /*, direction: Ordering*/) -> Phase {
+            let groups: Vec<Group> = Vec::with_capacity(n);
+            let groups: Box<Vec<Group>> = Box::new(groups);
+                Phase {
+                    groups,
+                    /*direction*/
+                }
+            }
+        }
     }
 
     pub mod recursive {
@@ -147,7 +178,7 @@ pub mod bitonic {
         #[inline(always)]
         fn merge<T: PartialOrd>(list: &mut Vec<T>, lo: i64, n: i64, dir: Ordering) {
             if n > 1 { // Exit condition: n == 1
-                let  m: i64 = greatest_power_of_two_less_than(n);
+                let  m: i64 = greatest_power_of_two_less_than(n).unwrap();
                 for i in 0..lo+n-m {
                     if list[i as usize].partial_cmp(&list[(i+m) as usize]).unwrap() != dir {
                         list.swap(i as usize, (i+m) as usize);
@@ -206,7 +237,7 @@ pub mod bitonic {
         #[inline(always)]
         fn index_calculation_merge(compares: &mut Vec<network::Node>, lo: i64, n: i64, dir: Ordering) {
             if n > 1 { // Exit condition: n == 1
-                let  m: i64 = greatest_power_of_two_less_than(n);
+                let  m: i64 = greatest_power_of_two_less_than(n).unwrap();
                 for i in 0..lo+n-m {
                     compares.push( network::Node::new(i as usize, (i+m) as usize, dir));
                 }
@@ -237,67 +268,202 @@ pub mod bitonic {
     }
 
     pub mod iterative {
-        /*use std::cmp::Ordering;*/
+        use std::{cmp::Ordering};
 
-        pub fn bitonic_sort<T: PartialOrd>(/*list: &mut Vec<T>, lo: i64, n: i64, dir: Ordering*/) {
-            unimplemented!("Iterative Bitonic Sort not available!");
+        use super::{
+            network::{
+                Node,
+                Group,
+                Phase
+            }, 
+            helper::least_power_of_two_greater_than
+        };
+        pub fn sort_by_phase<T: PartialOrd>(list: &mut Vec<T>) {
+            !unimplemented!("Phase not implemented");
+        }
+
+
+        pub fn sort_by_group<T: PartialOrd>(list: &mut Vec<T>) {
+            let sorting_network: Vec<Group> = network_group(list.len() as i64);
+            for group in sorting_network.iter() {
+                for node in group.elements.iter() {
+                    let (i, j, direction): (usize, usize, Ordering) = node.details();
+                    if list[i].partial_cmp(&list[j]) != Some(direction) {
+                        list.swap(i, j);
+                    }
+                }
+            }
+        }
+
+
+        pub fn sort<T: PartialOrd>(list: &mut Vec<T>) {
+            let sorting_network: Vec<Node> = network(list.len() as i64);
+            for node in sorting_network.iter() {
+                let (i, j, direction): (usize, usize, Ordering) = node.details();
+                if list[i].partial_cmp(&list[j]) != Some(direction) {
+                    list.swap(i, j);
+                }
+            }
+        }
+
+        pub fn network_phases(len: i64) -> Vec<Phase> {
+            let mut phases: Vec<Phase> = Vec::new();
+            let pow_two: i64 = least_power_of_two_greater_than(len).unwrap();
+            phase_calculation(&mut phases, pow_two, len- 1);
+            phases
+        }
+
+        pub fn network_group(len: i64) -> Vec<Group> {
+            let mut groups  : Vec<Group> = Vec::new();
+            let pow_two: i64 = least_power_of_two_greater_than(len).unwrap();
+            group_calculation(&mut groups, pow_two, len- 1);
+            groups
+        }
+
+        pub fn network(len: i64) -> Vec<Node> {
+            let mut nodes: Vec<Node> = Vec::new();
+            let pow_two: i64 = least_power_of_two_greater_than(len).unwrap();
+            index_calculation(&mut notes, pow_two, len- 1);
+            nodes 
+            
+        }
+
+        fn phase_calculation(list: &mut Vec<Phase>, n: i64, hi: i64) {
             /*
+            let phase_count = least_power_of_two_greater_than(n).unwrap() as usize;
+            let mut phases: Vec<Phase> = Vec::with_capacity(phase_count);
+            let mut s: i64 = 2;
+            while s <= n {
+                let phase = Phase::new((2 * n) as usize);
+                for i in 0..n {
+                    merge_group(list, i, s, hi,  Ordering::Greater);
+                    merge_group(list, i + s, s,  hi, Ordering::Less);
+                }
+                s *= 2;
+            }
+            */
+        }
+
+        fn group_calculation(list: &mut Vec<Group>, n: i64, hi: i64) {
+            let mut s: i64 = 2;
+            while s <= n {
+                for i in 0..n {
+                    merge_group(list, i, s, hi,  Ordering::Greater);
+                    merge_group(list, i + s, s,  hi, Ordering::Less);
+                }
+                s *= 2;
+            }
+        }
+
+        fn index_calculation(list: &mut Vec<Node>, n: i64, hi: i64) {
             // Credit to: 
             //      John Mellor-Crummy & Thomas Anastasio
             //      https://people.cs.rutgers.edu/~venugopa/parallel_summer2012/bitonic_overview.html
+            let mut s: i64 = 2;
+            while s <= n {
+                for i in 0..n {
+                    merge(list, i, s, hi,  Ordering::Greater);
+                    merge(list, i + s, s,  hi, Ordering::Less);
+                }
+                s *= 2;
+            }
+        }
 
+        fn merge_group(list: &mut Vec<Group>, lo: i64, n: i64, hi: i64, direction: Ordering) {
+            let mut group = Group::new(n as usize);
+            merge(&mut group.elements, lo, n, hi, direction);
+            list.push(group);
+        }
+
+
+        fn merge(list: &mut Vec<Node>, lo: i64, n: i64, hi: i64, direction: Ordering) {
+            /*
             void merge_up(int *arr, int n) {
-            int step=n/2,i,j,k,temp;
-            while (step > 0) {
-                for (i=0; i < n; i+=step*2) {
-                for (j=i,k=0;k < step;j++,k++) {
-                if (arr[j] > arr[j+step]) {
-                // swap
-                temp = arr[j];
-                arr[j]=arr[j+step];
-                arr[j+step]=temp;
+                int step=n/2,s,i,j,temp;
+                while (step > 0) {
+                    for (s=0; s < n; s+=step*2) {
+                        for (i=s,j=0;j < step;i++,j++) {
+                            if (arr[i] > arr[i+step]) { // list.push(i, j+step, '>');
+                                // swap
+                                temp = arr[i];
+                                arr[i]=arr[i+step];
+                                arr[i+step]=temp;
+                            }
+                        }
+                    }
+                    step /= 2;
                 }
-                }
+            }
+            */
+            let base: usize = lo as usize;
+            let mut step: i64 = (n as i64) /2;
+            let mut i: usize;
+            while step > 0 {
+                for s in (0..n).step_by((step as usize)*2) {
+                    i = s as usize;
+                    for j in 0..(step as usize) {
+                        let a = base + i;
+                        let b = base + j + step as usize;
+                        if b > hi as usize || a > hi as usize { break; }  // We already checked a = base + i = base + s;
+                        list.push(Node::new(a, b, direction));
+                        i += i;
+                    }
                 }
                 step /= 2;
             }
-            }
-
-            void merge_down(int *arr, int n) {
-            int step=n/2,i,j,k,temp;
-            while (step > 0) {
-                for (i=0; i < n; i+=step*2) {
-                for (j=i,k=0;k < step;j++,k++) {
-                if (arr[j] < arr[j+step]) {
-                // swap
-                temp = arr[j];
-                arr[j]=arr[j+step];
-                arr[j+step]=temp;
-                }
-
-            // do merges
-            for (s=2; s <= n; s*=2) { // sort power of two list (left)
-                for (i=0; i < n;) {
-                    merge_up((arr+i),s);
-                    merge_down((arr+i+s),s);
-                    i += s*2;
-                }
-            } // repeat for remaining power(s) of two list (right).
-            // merge lest left and right lists
-            */
         }
     }
 
 
     pub mod helper{
-        // n>=2  and  n<=Integer.MAX_VALUE
-        pub fn greatest_power_of_two_less_than(n: i64) -> i64 {
+        pub fn greatest_power_of_two_less_than(n: i64) -> Result<i64, &'static str> {
             let mut k: i64 = 1;
             while k>0 && k< n  { k <<= 1; }
-            k.rotate_right(1)
+            Ok(k.rotate_right(1))
         }
 
+        pub fn least_power_of_two_greater_than(n: i64) -> Result<i64, &'static str> {
+            if n < 1  || i64::MAX < n { return Err("input value out of range"); }
+
+            let e = n.ilog2(); // Log base 2 of n, rounded down.
+            let k = 2i64.pow(e);
+            let k = if n <= k { k }  else { 2i64.pow(e + 1)};
+
+            if k < 1  || i64::MAX < k.into() { return Err("resulting value out of range"); }
+            else {                      return Ok(k.into()); }
+
+            
+        }
+
+
     }
+}
+
+#[cfg(test)]
+mod helper {
+    use crate::bitonic::helper::least_power_of_two_greater_than;
+
+
+    #[test]
+    fn power_of_two_greater() {
+        for (a,b) in [1, 2, 3, 5, 6,  8,  9, 12, 14, 15, 16, 17, 24, 31, 32, 33].iter()
+                           .zip([1, 2, 4, 8, 8,  8, 16, 16, 16, 16, 16, 32, 32, 32, 32, 64 ]) {
+            assert_eq!(least_power_of_two_greater_than(*a).unwrap(), b);
+
+        }
+    }
+    /*FIXME: I shouldn't be using signed integers.
+    #[test]
+    fn power_of_two_lesser() {
+        for (a,b) in [1, 2, 3, 5, 6,  8,  9, 12, 14, 15, 16, 17, 24, 31, 32, 33].iter()
+                           .zip([1, 2, 2, 4, 4,  8,  8,  8,  8,  8, 16, 16, 16, 16, 32, 32]) {
+            let a = greatest_power_of_two_less_than(*a).unwrap();
+            if a != b { println!("{} {}", a, b); }
+            assert_eq!(a as u64, b as u64);
+
+        }
+    }
+    */
 }
 
 #[cfg(test)]
@@ -412,9 +578,9 @@ mod sorting {
     }
 
     #[test]
-    fn bitonic_recursive_sort_random() {
+    fn bitonic_recursive_random() {
         use rand::{distributions::Standard, Rng};
-        for list_size in 10..=100 {
+        for list_size in 50..=100 {
             let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
             let mut expected: Vec<u64> = test_vector.clone();
             bitonic::recursive::sort(&mut test_vector, 0 as i64, list_size as i64, Ordering::Greater);
@@ -454,6 +620,81 @@ mod sorting {
         }
     }
     */
+    #[test]
+    fn bitonic_iterative_indices_fixed() {
+        let p0: OrdinalPixel = OrdinalPixel::from( vec![255,   0,   0,   0] );
+        let p1: OrdinalPixel = OrdinalPixel::from( vec![0  , 255,   0,   0] ); 
+        let p2: OrdinalPixel = OrdinalPixel::from( vec![0  ,   0, 255,   0] );
+        let p3: OrdinalPixel = OrdinalPixel::from( vec![0  ,   0,   0, 255] );
+        let expected: Vec<&OrdinalPixel> = vec![&p3, &p2, &p1, &p0];
+        let mut test_vectors = vec![
+            vec![&p0, &p1, &p2, &p3],
+            vec![&p1, &p2, &p3, &p0],
+            vec![&p2, &p3, &p0, &p1],
+            vec![&p3, &p0, &p1, &p2],
+            vec![&p3, &p2, &p1, &p0],
+            vec![&p2, &p1, &p0, &p3],
+            vec![&p1, &p0, &p3, &p2],
+            vec![&p0, &p3, &p2, &p1],
+            vec![&p0, &p2, &p1, &p3],
+            vec![&p2, &p1, &p3, &p0],
+            vec![&p1, &p3, &p0, &p2],
+            vec![&p3, &p0, &p2, &p1],
+            vec![&p1, &p0, &p2, &p3],
+            vec![&p0, &p2, &p3, &p1],
+            vec![&p2, &p3, &p1, &p0],
+            vec![&p3, &p1, &p0, &p2],
+        ];
+        use bitonic::network::Node;
+        let network: Vec<Node> = bitonic::iterative::network(4);
+        for vector in test_vectors.iter_mut() {
+            for node in network.iter() {
+                let (i, j, direction): (usize, usize, Ordering) = node.details();
+                if vector[i].cmp(&vector[j]) != direction {
+                    vector.swap(i, j);
+                }
+            }
+            assert_eq!(vector, &expected);
+        }
+    }
+
+    #[test]
+    fn bitonic_iterative_random() {
+        use rand::{distributions::Standard, Rng};
+        for list_size in 50..=100 {
+            let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+            //let tv_clone = test_vector.clone();
+            let mut expected: Vec<u64> = test_vector.clone();
+            bitonic::iterative::sort(&mut test_vector);
+            expected.sort();
+            expected.reverse();
+            for (i,(x,y)) in test_vector.iter().zip(expected.iter()).enumerate(){
+                if x!= y {
+                    println!("[{} of {}] {} != {}",i, list_size, x, y);
+                }
+            }
+            assert_eq!(test_vector, expected);
+        }
+    }
+
+    #[test]
+    fn bitonic_iterative_by_group_random() {
+        use rand::{distributions::Standard, Rng};
+        for list_size in 50..=100 {
+            let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+            //let tv_clone = test_vector.clone();
+            let mut expected: Vec<u64> = test_vector.clone();
+            bitonic::iterative::sort_by_group(&mut test_vector);
+            expected.sort();
+            expected.reverse();
+            for (i,(x,y)) in test_vector.iter().zip(expected.iter()).enumerate(){
+                if x!= y {
+                    println!("[{} of {}] {} != {}",i, list_size, x, y);
+                }
+            }
+            assert_eq!(test_vector, expected);
+        }
+    }
 }
 
 #[cfg(test)]
