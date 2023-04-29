@@ -198,7 +198,7 @@ pub mod bitonic {
         /// power of 2 by using only the first n – p/2 comparators of B_{p}. 
         pub fn network(len: i64) -> Vec<network::Node> {
             let mut compares: Vec<network::Node> = Vec::new();
-            index_calculation(&mut compares, 0, len, Ordering::Greater);
+            nodes(&mut compares, 0, len, Ordering::Greater);
             compares
             
         }
@@ -219,7 +219,7 @@ pub mod bitonic {
         ///     5---⊛--⊛--------⊛--------⊛--
         /// Note that compares are only between two elements of which
         /// are denotes with '⊛' in the direction of either '∇' or '∆'
-        fn index_calculation(compares: &mut Vec<network::Node>, lo: i64, n: i64, dir: Ordering) {
+        fn nodes(compares: &mut Vec<network::Node>, lo: i64, n: i64, dir: Ordering) {
             if n > 1 {
                 let m: i64 = n / 2;
                 let direction: Ordering = dir;
@@ -228,21 +228,21 @@ pub mod bitonic {
                     Ordering::Greater => Ordering::Less,
                     Ordering::Equal => panic!("Invalid ordering for bitonic sort")
                 };
-                index_calculation( compares, lo,       m, opposite);
-                index_calculation( compares, lo + m, n-m, direction);
-                index_calculation_merge(compares, lo,       n, direction);
+                nodes( compares, lo,       m, opposite);
+                nodes( compares, lo + m, n-m, direction);
+                nodes_merge(compares, lo,       n, direction);
             }
         }
 
         #[inline(always)]
-        fn index_calculation_merge(compares: &mut Vec<network::Node>, lo: i64, n: i64, dir: Ordering) {
+        fn nodes_merge(compares: &mut Vec<network::Node>, lo: i64, n: i64, dir: Ordering) {
             if n > 1 { // Exit condition: n == 1
                 let  m: i64 = greatest_power_of_two_less_than(n).unwrap();
                 for i in 0..lo+n-m {
                     compares.push( network::Node::new(i as usize, (i+m) as usize, dir));
                 }
-                index_calculation_merge(compares, lo, m, dir);
-                index_calculation_merge(compares, lo+m, n-m, dir);
+                nodes_merge(compares, lo, m, dir);
+                nodes_merge(compares, lo+m, n-m, dir);
             }
             /*
             let mut x = n;
@@ -268,7 +268,7 @@ pub mod bitonic {
     }
 
     pub mod iterative {
-        use std::{cmp::Ordering};
+        use std::cmp::Ordering;
 
         use super::{
             network::{
@@ -278,13 +278,24 @@ pub mod bitonic {
             }, 
             helper::least_power_of_two_greater_than
         };
+
         pub fn sort_by_phase<T: PartialOrd>(list: &mut Vec<T>) {
-            !unimplemented!("Phase not implemented");
+            let sorting_network: Vec<Phase> = network_phases(list.len() as i64);
+            for phase in sorting_network.iter() {
+                for group in phase.groups.iter() {
+                    for node in group.elements.iter() {
+                        let (i, j, direction): (usize, usize, Ordering) = node.details();
+                        if list[i].partial_cmp(&list[j]) != Some(direction) {
+                            list.swap(i, j);
+                        }
+                    }
+                }
+            }
         }
 
 
         pub fn sort_by_group<T: PartialOrd>(list: &mut Vec<T>) {
-            let sorting_network: Vec<Group> = network_group(list.len() as i64);
+            let sorting_network: Vec<Group> = network_groups(list.len() as i64);
             for group in sorting_network.iter() {
                 for node in group.elements.iter() {
                     let (i, j, direction): (usize, usize, Ordering) = node.details();
@@ -295,9 +306,8 @@ pub mod bitonic {
             }
         }
 
-
-        pub fn sort<T: PartialOrd>(list: &mut Vec<T>) {
-            let sorting_network: Vec<Node> = network(list.len() as i64);
+        pub fn sort_by_node<T: PartialOrd>(list: &mut Vec<T>) {
+            let sorting_network: Vec<Node> = network_nodes(list.len() as i64);
             for node in sorting_network.iter() {
                 let (i, j, direction): (usize, usize, Ordering) = node.details();
                 if list[i].partial_cmp(&list[j]) != Some(direction) {
@@ -307,44 +317,42 @@ pub mod bitonic {
         }
 
         pub fn network_phases(len: i64) -> Vec<Phase> {
-            let mut phases: Vec<Phase> = Vec::new();
             let pow_two: i64 = least_power_of_two_greater_than(len).unwrap();
-            phase_calculation(&mut phases, pow_two, len- 1);
-            phases
+            phases(pow_two, len- 1)
         }
 
-        pub fn network_group(len: i64) -> Vec<Group> {
-            let mut groups  : Vec<Group> = Vec::new();
+        pub fn network_groups(len: i64) -> Vec<Group> {
+            let mut group_set: Vec<Group> = Vec::new();
             let pow_two: i64 = least_power_of_two_greater_than(len).unwrap();
-            group_calculation(&mut groups, pow_two, len- 1);
-            groups
+            groups(&mut group_set, pow_two, len- 1);
+            group_set
         }
 
-        pub fn network(len: i64) -> Vec<Node> {
-            let mut nodes: Vec<Node> = Vec::new();
+        pub fn network_nodes(len: i64) -> Vec<Node> {
+            let mut comparison_set: Vec<Node> = Vec::new();
             let pow_two: i64 = least_power_of_two_greater_than(len).unwrap();
-            index_calculation(&mut notes, pow_two, len- 1);
-            nodes 
+            nodes(&mut comparison_set, pow_two, len- 1);
+            comparison_set
             
         }
 
-        fn phase_calculation(list: &mut Vec<Phase>, n: i64, hi: i64) {
-            /*
+        fn phases(n: i64, hi: i64) -> Vec<Phase> {
             let phase_count = least_power_of_two_greater_than(n).unwrap() as usize;
             let mut phases: Vec<Phase> = Vec::with_capacity(phase_count);
             let mut s: i64 = 2;
             while s <= n {
-                let phase = Phase::new((2 * n) as usize);
+                let mut phase = Phase::new((2 * n) as usize);
                 for i in 0..n {
-                    merge_group(list, i, s, hi,  Ordering::Greater);
-                    merge_group(list, i + s, s,  hi, Ordering::Less);
+                    merge_group(&mut phase.groups, i, s, hi,  Ordering::Greater);
+                    merge_group(&mut phase.groups, i + s, s,  hi, Ordering::Less);
                 }
                 s *= 2;
+                phases.push(phase);
             }
-            */
+            phases
         }
 
-        fn group_calculation(list: &mut Vec<Group>, n: i64, hi: i64) {
+        fn groups(list: &mut Vec<Group>, n: i64, hi: i64) {
             let mut s: i64 = 2;
             while s <= n {
                 for i in 0..n {
@@ -355,7 +363,7 @@ pub mod bitonic {
             }
         }
 
-        fn index_calculation(list: &mut Vec<Node>, n: i64, hi: i64) {
+        fn nodes(list: &mut Vec<Node>, n: i64, hi: i64) {
             // Credit to: 
             //      John Mellor-Crummy & Thomas Anastasio
             //      https://people.cs.rutgers.edu/~venugopa/parallel_summer2012/bitonic_overview.html
@@ -414,7 +422,6 @@ pub mod bitonic {
         }
     }
 
-
     pub mod helper{
         pub fn greatest_power_of_two_less_than(n: i64) -> Result<i64, &'static str> {
             let mut k: i64 = 1;
@@ -436,6 +443,71 @@ pub mod bitonic {
         }
 
 
+    }
+}
+
+#[cfg(test)]
+mod multithreading {
+    use rayon::*;
+    use itertools::Itertools;
+    use std::cmp::Ordering;
+    use super::pixels::*;
+    use super::bitonic;
+    use super::bitonic::network::Group;
+
+    #[test]
+    fn simple_mt_pool() {
+        let cores = num_cpus::get_physical();
+        let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
+        let mut count: usize = 0;
+        let mut tids: Vec<usize> = Vec::new();
+        for _ in 0..cores {
+            tids.push(pool.install(|| { self::current_thread_index().unwrap() } ));
+            count += count;
+        }
+
+        // Test that we dont run only on thread 0
+        let reduced = tids.iter().fold(0, |acc, e| acc + e);
+        assert!( reduced != 0, "Cores = {}, Count = {}", cores, count);
+        
+        // Test that we get more than one thread id.
+        let uniq: Vec<&usize> = tids.iter().unique().collect();
+        assert!(uniq.len() != 1, "Only {} unique TID: {}", uniq.len(), uniq[0]);
+    }
+
+    #[test]
+    fn simple_phase_sort_random() {
+        use rand::{distributions::Standard, Rng};
+
+        let cores = num_cpus::get();
+        let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
+    
+        for list_size in 100..=150 {
+            let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+            let mut expected: Vec<u64> = test_vector.clone();
+
+            let sorting_network: Vec<Group> = bitonic::iterative::network_groups(list_size as i64);
+            for group in sorting_network.iter() {
+
+                pool.install(|| {
+                    for node in group.elements.iter() {
+                        let (i, j, direction): (usize, usize, Ordering) = node.details();
+                        if test_vector[i].partial_cmp(&test_vector[j]) != Some(direction) {
+                            test_vector.swap(i, j);
+                        }
+                    }
+                });
+
+            }
+            expected.sort();
+            expected.reverse();
+            for (i,(x,y)) in test_vector.iter().zip(expected.iter()).enumerate(){
+                if x!= y {
+                    println!("[{} of {}] {} != {}",i, list_size, x, y);
+                }
+            }
+            assert_eq!(test_vector, expected);
+        }
     }
 }
 
@@ -646,7 +718,7 @@ mod sorting {
             vec![&p3, &p1, &p0, &p2],
         ];
         use bitonic::network::Node;
-        let network: Vec<Node> = bitonic::iterative::network(4);
+        let network: Vec<Node> = bitonic::iterative::network_nodes(4);
         for vector in test_vectors.iter_mut() {
             for node in network.iter() {
                 let (i, j, direction): (usize, usize, Ordering) = node.details();
@@ -665,7 +737,7 @@ mod sorting {
             let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
             //let tv_clone = test_vector.clone();
             let mut expected: Vec<u64> = test_vector.clone();
-            bitonic::iterative::sort(&mut test_vector);
+            bitonic::iterative::sort_by_node(&mut test_vector);
             expected.sort();
             expected.reverse();
             for (i,(x,y)) in test_vector.iter().zip(expected.iter()).enumerate(){
@@ -685,6 +757,25 @@ mod sorting {
             //let tv_clone = test_vector.clone();
             let mut expected: Vec<u64> = test_vector.clone();
             bitonic::iterative::sort_by_group(&mut test_vector);
+            expected.sort();
+            expected.reverse();
+            for (i,(x,y)) in test_vector.iter().zip(expected.iter()).enumerate(){
+                if x!= y {
+                    println!("[{} of {}] {} != {}",i, list_size, x, y);
+                }
+            }
+            assert_eq!(test_vector, expected);
+        }
+    }
+
+    #[test]
+    fn bitonic_iterative_by_phase_random() {
+        use rand::{distributions::Standard, Rng};
+        for list_size in 50..=100 {
+            let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+            //let tv_clone = test_vector.clone();
+            let mut expected: Vec<u64> = test_vector.clone();
+            bitonic::iterative::sort_by_phase(&mut test_vector);
             expected.sort();
             expected.reverse();
             for (i,(x,y)) in test_vector.iter().zip(expected.iter()).enumerate(){
