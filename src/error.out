@@ -1,0 +1,348 @@
+Panic context:
+> 
+version: 0.3.1489-standalone
+request: textDocument/codeAction CodeActionParams {
+    text_document: TextDocumentIdentifier {
+        uri: Url {
+            scheme: "file",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: None,
+            port: None,
+            path: "/home/chuck/Documents/Programming/Rust/pixelsort/src/lib.rs",
+            query: None,
+            fragment: None,
+        },
+    },
+    range: Range {
+        start: Position {
+            line: 451,
+            character: 26,
+        },
+        end: Position {
+            line: 451,
+            character: 26,
+        },
+    },
+    context: CodeActionContext {
+        diagnostics: [],
+        only: None,
+        trigger_kind: Some(
+            Automatic,
+        ),
+    },
+    work_done_progress_params: WorkDoneProgressParams {
+        work_done_token: None,
+    },
+    partial_result_params: PartialResultParams {
+        partial_result_token: None,
+    },
+}
+
+> impl_trait_query(ImplId(21595) -> ItemLoc { container: ModuleId { krate: Idx::<CrateData>(74), block: None, local_id: Idx::<ModuleData>(1) }, id: ItemTreeId { tree: TreeId { file: HirFileId(1217), block: None }, value: Idx::<Impl>(0) } } -> ImplData { target_trait: None, self_ty: Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("Barrier"))] }, generic_args: Some([Some(GenericArgs { args: [Type(Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("R"))] }, generic_args: None }))], has_self_type: false, bindings: [], desugared_from_fn: false })]) }), items: [FunctionId(FunctionId(34983))], is_negative: false, attribute_calls: None })
+
+> impl_self_ty_query(ImplId(21595) -> ItemLoc { container: ModuleId { krate: Idx::<CrateData>(74), block: None, local_id: Idx::<ModuleData>(1) }, id: ItemTreeId { tree: TreeId { file: HirFileId(1217), block: None }, value: Idx::<Impl>(0) } } -> ImplData { target_trait: None, self_ty: Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("Barrier"))] }, generic_args: Some([Some(GenericArgs { args: [Type(Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("R"))] }, generic_args: None }))], has_self_type: false, bindings: [], desugared_from_fn: false })]) }), items: [FunctionId(FunctionId(34983))], is_negative: false, attribute_calls: None })
+
+> DefMap Idx::<CrateData>(74) crate_name=Some(CrateDisplayName { crate_name: CrateName("smallvec"), canonical_name: "smallvec" }) block=None path=Barrier
+
+thread 'Worker' panicked at 'index out of bounds: the len is 1 but the index is 1', crates/hir-def/src/nameres/path_resolution.rs:390:33
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/std/src/panicking.rs:579:5
+   1: core::panicking::panic_fmt
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/core/src/panicking.rs:64:14
+   2: core::panicking::panic_bounds_check
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/core/src/panicking.rs:159:5
+   3: hir_def::nameres::path_resolution::<impl hir_def::nameres::DefMap>::resolve_path_fp_with_macro_single
+   4: hir_def::resolver::ModuleItemMap::resolve_path_in_type_ns
+   5: hir_def::resolver::Resolver::resolve_path_in_type_ns
+   6: hir_ty::lower::TyLoweringContext::lower_ty_ext
+   7: hir_ty::lower::impl_self_ty_query
+   8: salsa::runtime::Runtime::execute_query_implementation
+   9: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  10: salsa::derived::slot::Slot<Q,MP>::read
+  11: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  12: <DB as hir_ty::db::HirDatabase>::impl_self_ty::__shim
+  13: hir_ty::lower::impl_trait_query
+  14: salsa::runtime::Runtime::execute_query_implementation
+  15: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  16: salsa::derived::slot::Slot<Q,MP>::maybe_changed_since
+  17: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::maybe_changed_since
+  18: salsa::derived::slot::MemoRevisions::validate_memoized_value
+  19: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  20: salsa::derived::slot::Slot<Q,MP>::read
+  21: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  22: <DB as hir_ty::db::HirDatabase>::trait_impls_in_crate::__shim
+  23: hir_ty::method_resolution::TraitImpls::trait_impls_in_deps_query
+  24: salsa::runtime::Runtime::execute_query_implementation
+  25: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  26: salsa::derived::slot::Slot<Q,MP>::read
+  27: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  28: <DB as hir_ty::db::HirDatabase>::trait_impls_in_deps::__shim
+  29: hir_ty::chalk_db::<impl chalk_solve::RustIrDatabase<hir_ty::interner::Interner> for hir_ty::traits::ChalkContext>::impls_for_trait
+  30: chalk_recursive::solve::SolveIterationHelpers::solve_from_clauses
+  31: chalk_recursive::solve::SolveIteration::solve_iteration
+  32: chalk_recursive::fixed_point::RecursiveContext<K,V>::solve_goal
+  33: chalk_recursive::fixed_point::RecursiveContext<K,V>::solve_root_goal
+  34: hir_ty::traits::trait_solve_query
+  35: salsa::runtime::Runtime::execute_query_implementation
+  36: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  37: salsa::derived::slot::Slot<Q,MP>::read
+  38: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  39: <DB as hir_ty::db::HirDatabase>::trait_solve_query::__shim
+  40: <DB as hir_ty::db::HirDatabase>::trait_solve_query
+  41: hir_ty::db::trait_solve_wait
+  42: <DB as hir_ty::db::HirDatabase>::trait_solve
+  43: hir_ty::infer::unify::InferenceTable::try_obligation
+  44: hir_ty::autoderef::deref_by_trait
+  45: hir_ty::autoderef::autoderef_step
+  46: <hir_ty::autoderef::Autoderef as core::iter::traits::iterator::Iterator>::next
+  47: hir_ty::method_resolution::autoderef_method_receiver
+  48: hir_ty::method_resolution::iterate_method_candidates_dyn
+  49: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  50: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr
+  51: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  52: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_coerce
+  53: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_block
+  54: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  55: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_return
+  56: hir_ty::infer::infer_query
+  57: salsa::runtime::Runtime::execute_query_implementation
+  58: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  59: salsa::derived::slot::Slot<Q,MP>::read
+  60: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  61: <DB as hir_ty::db::HirDatabase>::infer_query::__shim
+  62: <DB as hir_ty::db::HirDatabase>::infer_query
+  63: hir_ty::db::infer_wait
+  64: <DB as hir_ty::db::HirDatabase>::infer
+  65: hir::DefWithBody::diagnostics
+  66: hir::Module::diagnostics
+  67: hir::Module::diagnostics
+  68: ide_diagnostics::diagnostics
+  69: std::panicking::try
+  70: ide::Analysis::assists_with_fixes
+  71: rust_analyzer::handlers::handle_code_action
+  72: std::panicking::try
+  73: <F as threadpool::FnBox>::call_box
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+Panic context:
+> 
+version: 0.3.1489-standalone
+request: textDocument/codeAction CodeActionParams {
+    text_document: TextDocumentIdentifier {
+        uri: Url {
+            scheme: "file",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: None,
+            port: None,
+            path: "/home/chuck/Documents/Programming/Rust/pixelsort/src/lib.rs",
+            query: None,
+            fragment: None,
+        },
+    },
+    range: Range {
+        start: Position {
+            line: 451,
+            character: 28,
+        },
+        end: Position {
+            line: 451,
+            character: 28,
+        },
+    },
+    context: CodeActionContext {
+        diagnostics: [],
+        only: None,
+        trigger_kind: Some(
+            Automatic,
+        ),
+    },
+    work_done_progress_params: WorkDoneProgressParams {
+        work_done_token: None,
+    },
+    partial_result_params: PartialResultParams {
+        partial_result_token: None,
+    },
+}
+
+> impl_trait_query(ImplId(18073) -> ItemLoc { container: ModuleId { krate: Idx::<CrateData>(76), block: None, local_id: Idx::<ModuleData>(3) }, id: ItemTreeId { tree: TreeId { file: HirFileId(1255), block: None }, value: Idx::<Impl>(0) } } -> ImplData { target_trait: Some(TraitRef { path: Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("private")), Name(Text("Sealed"))] }, generic_args: None } }), self_ty: Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("Ident"))] }, generic_args: None }), items: [], is_negative: false, attribute_calls: None })
+
+> impl_self_ty_query(ImplId(18073) -> ItemLoc { container: ModuleId { krate: Idx::<CrateData>(76), block: None, local_id: Idx::<ModuleData>(3) }, id: ItemTreeId { tree: TreeId { file: HirFileId(1255), block: None }, value: Idx::<Impl>(0) } } -> ImplData { target_trait: Some(TraitRef { path: Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("private")), Name(Text("Sealed"))] }, generic_args: None } }), self_ty: Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("Ident"))] }, generic_args: None }), items: [], is_negative: false, attribute_calls: None })
+
+> DefMap Idx::<CrateData>(76) crate_name=Some(CrateDisplayName { crate_name: CrateName("strsim"), canonical_name: "strsim" }) block=None path=Ident
+
+thread 'Worker' panicked at 'index out of bounds: the len is 1 but the index is 3', crates/hir-def/src/nameres/path_resolution.rs:390:33
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/std/src/panicking.rs:579:5
+   1: core::panicking::panic_fmt
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/core/src/panicking.rs:64:14
+   2: core::panicking::panic_bounds_check
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/core/src/panicking.rs:159:5
+   3: hir_def::nameres::path_resolution::<impl hir_def::nameres::DefMap>::resolve_path_fp_with_macro_single
+   4: hir_def::resolver::ModuleItemMap::resolve_path_in_type_ns
+   5: hir_def::resolver::Resolver::resolve_path_in_type_ns
+   6: hir_ty::lower::TyLoweringContext::lower_ty_ext
+   7: hir_ty::lower::impl_self_ty_query
+   8: salsa::runtime::Runtime::execute_query_implementation
+   9: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  10: salsa::derived::slot::Slot<Q,MP>::read
+  11: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  12: <DB as hir_ty::db::HirDatabase>::impl_self_ty::__shim
+  13: hir_ty::lower::impl_trait_query
+  14: salsa::runtime::Runtime::execute_query_implementation
+  15: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  16: salsa::derived::slot::Slot<Q,MP>::maybe_changed_since
+  17: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::maybe_changed_since
+  18: salsa::derived::slot::MemoRevisions::validate_memoized_value
+  19: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  20: salsa::derived::slot::Slot<Q,MP>::read
+  21: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  22: <DB as hir_ty::db::HirDatabase>::trait_impls_in_crate::__shim
+  23: hir_ty::method_resolution::TraitImpls::trait_impls_in_deps_query
+  24: salsa::runtime::Runtime::execute_query_implementation
+  25: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  26: salsa::derived::slot::Slot<Q,MP>::read
+  27: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  28: <DB as hir_ty::db::HirDatabase>::trait_impls_in_deps::__shim
+  29: hir_ty::chalk_db::<impl chalk_solve::RustIrDatabase<hir_ty::interner::Interner> for hir_ty::traits::ChalkContext>::impls_for_trait
+  30: chalk_recursive::solve::SolveIterationHelpers::solve_from_clauses
+  31: chalk_recursive::solve::SolveIteration::solve_iteration
+  32: chalk_recursive::fixed_point::RecursiveContext<K,V>::solve_goal
+  33: chalk_recursive::fixed_point::RecursiveContext<K,V>::solve_root_goal
+  34: hir_ty::traits::trait_solve_query
+  35: salsa::runtime::Runtime::execute_query_implementation
+  36: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  37: salsa::derived::slot::Slot<Q,MP>::read
+  38: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  39: <DB as hir_ty::db::HirDatabase>::trait_solve_query::__shim
+  40: <DB as hir_ty::db::HirDatabase>::trait_solve_query
+  41: hir_ty::db::trait_solve_wait
+  42: <DB as hir_ty::db::HirDatabase>::trait_solve
+  43: hir_ty::infer::unify::InferenceTable::try_obligation
+  44: hir_ty::autoderef::deref_by_trait
+  45: hir_ty::autoderef::autoderef_step
+  46: <hir_ty::autoderef::Autoderef as core::iter::traits::iterator::Iterator>::next
+  47: hir_ty::method_resolution::autoderef_method_receiver
+  48: hir_ty::method_resolution::iterate_method_candidates_dyn
+  49: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  50: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr
+  51: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  52: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_coerce
+  53: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_block
+  54: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  55: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_return
+  56: hir_ty::infer::infer_query
+  57: salsa::runtime::Runtime::execute_query_implementation
+  58: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  59: salsa::derived::slot::Slot<Q,MP>::read
+  60: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  61: <DB as hir_ty::db::HirDatabase>::infer_query::__shim
+  62: <DB as hir_ty::db::HirDatabase>::infer_query
+  63: hir_ty::db::infer_wait
+  64: <DB as hir_ty::db::HirDatabase>::infer
+  65: hir::DefWithBody::diagnostics
+  66: hir::Module::diagnostics
+  67: hir::Module::diagnostics
+  68: ide_diagnostics::diagnostics
+  69: std::panicking::try
+  70: ide::Analysis::assists_with_fixes
+  71: rust_analyzer::handlers::handle_code_action
+  72: std::panicking::try
+  73: <F as threadpool::FnBox>::call_box
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+Panic context:
+> 
+version: 0.3.1489-standalone
+request: textDocument/semanticTokens/full/delta SemanticTokensDeltaParams {
+    work_done_progress_params: WorkDoneProgressParams {
+        work_done_token: None,
+    },
+    partial_result_params: PartialResultParams {
+        partial_result_token: None,
+    },
+    text_document: TextDocumentIdentifier {
+        uri: Url {
+            scheme: "file",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: None,
+            port: None,
+            path: "/home/chuck/Documents/Programming/Rust/pixelsort/src/lib.rs",
+            query: None,
+            fragment: None,
+        },
+    },
+    previous_result_id: "1843",
+}
+
+> impl_self_ty_query(ImplId(21595) -> ItemLoc { container: ModuleId { krate: Idx::<CrateData>(74), block: None, local_id: Idx::<ModuleData>(1) }, id: ItemTreeId { tree: TreeId { file: HirFileId(1217), block: None }, value: Idx::<Impl>(0) } } -> ImplData { target_trait: None, self_ty: Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("Barrier"))] }, generic_args: Some([Some(GenericArgs { args: [Type(Path(Normal { type_anchor: None, mod_path: ModPath { kind: Plain, segments: [Name(Text("R"))] }, generic_args: None }))], has_self_type: false, bindings: [], desugared_from_fn: false })]) }), items: [FunctionId(FunctionId(34983))], is_negative: false, attribute_calls: None })
+
+> DefMap Idx::<CrateData>(74) crate_name=Some(CrateDisplayName { crate_name: CrateName("smallvec"), canonical_name: "smallvec" }) block=None path=Barrier
+
+thread 'Worker' panicked at 'index out of bounds: the len is 1 but the index is 1', crates/hir-def/src/nameres/path_resolution.rs:390:33
+stack backtrace:
+   0: rust_begin_unwind
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/std/src/panicking.rs:579:5
+   1: core::panicking::panic_fmt
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/core/src/panicking.rs:64:14
+   2: core::panicking::panic_bounds_check
+             at /rustc/84c898d65adf2f39a5a98507f1fe0ce10a2b8dbc/library/core/src/panicking.rs:159:5
+   3: hir_def::nameres::path_resolution::<impl hir_def::nameres::DefMap>::resolve_path_fp_with_macro_single
+   4: hir_def::resolver::ModuleItemMap::resolve_path_in_type_ns
+   5: hir_def::resolver::Resolver::resolve_path_in_type_ns
+   6: hir_ty::lower::TyLoweringContext::lower_ty_ext
+   7: hir_ty::lower::impl_self_ty_query
+   8: salsa::runtime::Runtime::execute_query_implementation
+   9: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  10: salsa::derived::slot::Slot<Q,MP>::maybe_changed_since
+  11: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::maybe_changed_since
+  12: salsa::derived::slot::MemoRevisions::validate_memoized_value
+  13: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  14: salsa::derived::slot::Slot<Q,MP>::read
+  15: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  16: <DB as hir_ty::db::HirDatabase>::inherent_impls_in_crate::__shim
+  17: hir_ty::method_resolution::incoherent_inherent_impl_crates
+  18: salsa::runtime::Runtime::execute_query_implementation
+  19: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  20: salsa::derived::slot::Slot<Q,MP>::read
+  21: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  22: <DB as hir_ty::db::HirDatabase>::incoherent_inherent_impl_crates::__shim
+  23: <DB as hir_ty::db::HirDatabase>::incoherent_inherent_impl_crates
+  24: hir_ty::method_resolution::def_crates
+  25: hir_ty::method_resolution::iterate_inherent_methods
+  26: hir_ty::method_resolution::iterate_method_candidates_with_autoref::{{closure}}
+  27: hir_ty::method_resolution::iterate_method_candidates_dyn
+  28: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  29: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr
+  30: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  31: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_coerce
+  32: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_block
+  33: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_expr_inner
+  34: hir_ty::infer::expr::<impl hir_ty::infer::InferenceContext>::infer_return
+  35: hir_ty::infer::infer_query
+  36: salsa::runtime::Runtime::execute_query_implementation
+  37: salsa::derived::slot::Slot<Q,MP>::read_upgrade
+  38: salsa::derived::slot::Slot<Q,MP>::read
+  39: <salsa::derived::DerivedStorage<Q,MP> as salsa::plumbing::QueryStorageOps<Q>>::try_fetch
+  40: <DB as hir_ty::db::HirDatabase>::infer_query::__shim
+  41: <DB as hir_ty::db::HirDatabase>::infer_query
+  42: hir_ty::db::infer_wait
+  43: <DB as hir_ty::db::HirDatabase>::infer
+  44: hir::source_analyzer::SourceAnalyzer::new_for_body
+  45: hir::semantics::SemanticsImpl::analyze_impl
+  46: ide_db::defs::NameClass::classify
+  47: ide::syntax_highlighting::highlight::name_like
+  48: ide::syntax_highlighting::highlight
+  49: std::panicking::try
+  50: rust_analyzer::handlers::handle_semantic_tokens_full_delta
+  51: std::panicking::try
+  52: <F as threadpool::FnBox>::call_box
+note: Some details are omitted, run with `RUST_BACKTRACE=full` for a verbose backtrace.
+[Error - 11:35:39 AM] Request textDocument/semanticTokens/full/delta failed.
+  Message: request handler panicked: index out of bounds: the len is 1 but the index is 1
+  Code: -32603 

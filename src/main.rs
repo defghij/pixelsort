@@ -45,15 +45,11 @@ fn main()  {
     let height: u32      = pixel_array.height.clone() as u32;
     let pixel_count: i64 = width as i64 * height as i64;
 
-    let network: Vec<bitonic::network::Node> = bitonic::recursive::network(pixel_count);
+    let mut network = bitonic::network::Network::new(pixel_count as usize);
+    let network = network.set_comparitors().clone();
+    
     let mut array: Box<Vec<OrdinalPixel>> = pixel_array.pixels();
-
-    for node in network.iter() {
-        let (i, j, direction): (usize, usize, Ordering) = node.details();
-        if array[i].cmp(&array[j]) != direction {
-            array.swap(i, j);
-        }
-    }
+    network.sort(&mut array);
 
     let sorted: Vec<u8> = array.deref()
                         .iter()
