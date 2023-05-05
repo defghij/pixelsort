@@ -1,10 +1,467 @@
 
+pub mod timing {
+    use plotters::{
+        prelude::{
+            BitMapBackend,
+            IntoDrawingArea,
+            ChartBuilder,
+            LabelAreaPosition,
+            Rectangle,
+            SeriesLabelPosition
+        }, 
+        style::{
+            self, Color
+        }, 
+        series::LineSeries
+    };
+    use rand::{
+        distributions::Standard,
+        Rng
+    };
+
+    use std::{
+        time::{
+            Duration,
+            Instant
+        }, 
+        cmp::Ordering
+    };
+    use rayon::*;
+
+    use super::pixels::{
+        PixelArray,
+        OrdinalPixel
+    };
+
+    use super::bitonic;
+
+    const XMIN: usize = 10;
+    const XMAX: usize = 100;
+    const XMINF: f64 = XMIN as f64;
+    const XMAXF: f64 = XMAX as f64;
+
+    pub fn general_profile_random_data() {
+        small_single_thread_random_data_comparative();
+        small_single_vs_multi_thread_random_data_comparative();
+    }
+
+    pub fn small_single_vs_multi_thread_random_data_comparative() {
+
+        let mut y_axis_single: Vec<f64> = Vec::new();
+        let mut y_axis_multi: Vec<f64> = Vec::new();
+        let mut x_axis: Vec<f64> = Vec::new();
+
+
+        for list_size in (XMIN..=XMAX).step_by(1) {
+            let test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+
+            let mut sorting_network = bitonic::network::Network::new(XMAX);
+            let sorting_network = sorting_network.set_input_length(list_size).set_comparitors();
+
+
+            let mut singlethread_tv: Vec<u64>         = test_vector.clone(); // Copy the test vector so we dont taint the data
+            let network: bitonic::network::Network = sorting_network.clone();
+            let start: Instant                     = Instant::now();
+
+            // Do the sort, while being timed
+            let iterative_network: bitonic::network::Network = network.clone();
+            iterative_network.sort(&mut singlethread_tv).unwrap();
+            let bitonic: Duration = start.elapsed();
+            y_axis_single.push(bitonic.as_micros() as f64);
+
+
+            let iterative_network: bitonic::network::Network = network.clone();
+            let nodes: Box<[bitonic::network::Node]> = iterative_network.nodes.clone();
+            let mut multithreaded_tv: Vec<u64>       = test_vector.clone(); // Copy the test vector so we dont taint the data
+            let cores = num_cpus::get();
+            let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
+            
+            let start: Instant = Instant::now();
+            for group in sorting_network.phases.iter() {
+                for (start, stop) in group.iter() {
+                    for node in *start..*stop {
+                        pool.install(|| {
+                                    let (i, j, direction): (usize, usize, Ordering) = nodes[node].details();
+                                    if multithreaded_tv[i].partial_cmp(&multithreaded_tv[j]) != Some(direction) {
+                                        multithreaded_tv.swap(i, j);
+                                    }
+                        });
+                    }
+                }
+
+            }
+            let bitonic: Duration = start.elapsed();
+            y_axis_multi.push(bitonic.as_micros() as f64);
+
+            x_axis.push(list_size as f64);
+        }
+
+        let ymin = y_axis_single.clone().into_iter()
+                                    .reduce(f64::min).unwrap()
+                                    .min(y_axis_multi.clone().into_iter().reduce(f64::min).unwrap());
+
+        let ymax = y_axis_single.clone().into_iter()
+                                    .reduce(f64::max).unwrap()
+                                    .max(y_axis_multi.clone().into_iter().reduce(f64::max).unwrap());
+
+
+        let root_area = BitMapBackend::new("./plot.st_and_mt.small.comparative.random.png", (1200, 800)).into_drawing_area();
+        root_area.fill(&style::WHITE).unwrap();
+
+        let mut ctx = ChartBuilder::on(&root_area)
+                        .set_label_area_size(LabelAreaPosition::Left, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Bottom, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Right, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Top, 80.0)
+                        .caption("Comparative Timings", ("sans-serif", 40.0))
+                        .build_cartesian_2d(XMINF..XMAXF, ymin..ymax)
+                        .unwrap();
+
+        ctx.configure_mesh()
+            .x_desc("List Size")
+            .y_desc("microseconds")
+            .draw()
+            .unwrap();
+
+        ctx.draw_series(
+            LineSeries::new(
+                    x_axis.clone()
+                                .iter()
+                                .zip(y_axis_single.clone().iter())
+                                .map(|(x,y)|{(*x, *y)} ),&style::GREEN))
+                .unwrap()
+                .label("Iterative::Single-Threaded")
+                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::GREEN)
+            );
+
+        ctx.draw_series(
+            LineSeries::new(
+                    x_axis.clone()
+                                .iter()
+                                .zip(y_axis_multi.clone().iter())
+                                .map(|(x,y)|{(*x, *y)} ),&style::RED))
+                .unwrap()
+                .label("Iterative::Multi-Threaded")
+                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::RED)
+            );
+
+        ctx.configure_series_labels()
+            .position(SeriesLabelPosition::UpperLeft)
+            .margin(20)
+            .legend_area_size(5)
+            .border_style(style::BLUE)
+            .background_style(style::BLUE.mix(0.1))
+            .label_font(("Calibri", 20))
+            .draw()
+            .unwrap();
+
+    }
+
+    pub fn small_single_thread_random_data_comparative() {
+
+
+        let mut y_axis_iterative: Vec<f64> = Vec::new();
+        let mut y_axis_recursive: Vec<f64> = Vec::new();
+        let mut y_axis_nlog2n: Vec<f64> = Vec::new();
+        let mut x_axis: Vec<f64> = Vec::new();
+
+
+        for list_size in (XMIN..=XMAX).step_by(1) {
+            let test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+
+            let mut sorting_network = bitonic::network::Network::new(XMAX);
+            let sorting_network = sorting_network.set_input_length(list_size).set_comparitors();
+
+
+            let mut iterative_tv: Vec<u64>         = test_vector.clone(); // Copy the test vector so we dont taint the data
+            let network: bitonic::network::Network = sorting_network.clone();
+            let start: Instant                     = Instant::now();
+
+            // Do the sort, while being timed
+            network.sort(&mut iterative_tv).unwrap();
+            let bitonic: Duration = start.elapsed();
+            y_axis_iterative.push(bitonic.as_micros() as f64);
+            
+            let mut recursive_tv: Vec<u64> = test_vector.clone(); // Copy the test vector so we dont taint the data
+            let start: Instant             = Instant::now();
+            bitonic::recursive::sort(&mut recursive_tv, 0 as i64, list_size as i64, Ordering::Greater);
+            let bitonic: Duration = start.elapsed();
+            y_axis_recursive.push(bitonic.as_micros() as f64);
+
+            y_axis_nlog2n.push((list_size * list_size.ilog2().pow(2) as usize) as f64);
+            x_axis.push(list_size as f64);
+        }
+
+        let ymin = y_axis_iterative.clone().into_iter()
+                                    .reduce(f64::min).unwrap()
+                                    .min(y_axis_recursive.clone().into_iter().reduce(f64::min).unwrap())
+                                    .min(y_axis_nlog2n.clone().into_iter().reduce(f64::min).unwrap());
+
+        let ymax = y_axis_iterative.clone().into_iter()
+                                    .reduce(f64::max).unwrap()
+                                    .max(y_axis_recursive.clone().into_iter().reduce(f64::max).unwrap())
+                                    .max(y_axis_nlog2n.clone().into_iter().reduce(f64::max).unwrap());
+
+
+        let root_area = BitMapBackend::new("./plot.st.small.comparative.random.png", (1200, 800)).into_drawing_area();
+        root_area.fill(&style::WHITE).unwrap();
+
+        let mut ctx = ChartBuilder::on(&root_area)
+                        .set_label_area_size(LabelAreaPosition::Left, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Bottom, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Right, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Top, 80.0)
+                        .caption("Comparative Timings", ("sans-serif", 40.0))
+                        .build_cartesian_2d(XMINF..XMAXF, ymin..ymax)
+                        .unwrap();
+
+        ctx.configure_mesh()
+            .x_desc("List Size")
+            .y_desc("microseconds")
+            .draw()
+            .unwrap();
+
+        ctx.draw_series(
+            LineSeries::new(
+                    x_axis.clone()
+                                .iter()
+                                .zip(y_axis_iterative.clone().iter())
+                                .map(|(x,y)|{(*x, *y)} ),&style::GREEN))
+                .unwrap()
+                .label("Iterative")
+                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::GREEN)
+            );
+
+        ctx.draw_series(
+            LineSeries::new(
+                    x_axis.clone()
+                                .iter()
+                                .zip(y_axis_recursive.clone().iter())
+                                .map(|(x,y)|{(*x, *y)} ),&style::RED))
+                .unwrap()
+                .label("Recursive")
+                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::RED)
+            );
+
+        let scalar_constant: f64 = 1f64;
+        ctx.draw_series(
+            LineSeries::new(
+                    x_axis.clone()
+                                .iter()
+                                .zip(y_axis_nlog2n.clone().iter())
+                                .map(|(x,y)|{(*x, *y * scalar_constant)} ),&style::BLACK))
+                .unwrap()
+                .label("O(nlog2(n)^2)")
+                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::BLACK)
+            );
+
+        ctx.configure_series_labels()
+            .position(SeriesLabelPosition::UpperLeft)
+            .margin(20)
+            .legend_area_size(5)
+            .border_style(style::BLUE)
+            .background_style(style::BLUE.mix(0.1))
+            .label_font(("Calibri", 20))
+            .draw()
+            .unwrap();
+
+    }
+
+    pub fn large_single_thread_random_data_isolated() {
+
+        const XMIN: usize = 10;
+        const XMAX: usize = 5000;
+        const XMINF: f64 = XMIN as f64;
+        const XMAXF: f64 = XMAX as f64;
+
+        let mut y_axis_iterative: Vec<f64> = Vec::new();
+        let mut y_axis_recursive: Vec<f64> = Vec::new();
+        let mut x_axis: Vec<f64> = Vec::new();
+
+
+        for list_size in (XMIN..=XMAX).step_by(1) {
+            let test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+
+            let mut sorting_network = bitonic::network::Network::new(XMAX);
+            let sorting_network = sorting_network.set_input_length(list_size).set_comparitors();
+
+
+            let mut iterative_tv: Vec<u64>         = test_vector.clone(); // Copy the test vector so we dont taint the data
+            let network: bitonic::network::Network = sorting_network.clone();
+            let start: Instant                     = Instant::now();
+
+            // Do the sort, while being timed
+            network.sort(&mut iterative_tv).unwrap();
+            let bitonic: Duration = start.elapsed();
+            y_axis_iterative.push(bitonic.as_micros() as f64);
+            
+            let mut recursive_tv: Vec<u64> = test_vector.clone(); // Copy the test vector so we dont taint the data
+            let start: Instant             = Instant::now();
+            bitonic::recursive::sort(&mut recursive_tv, 0 as i64, list_size as i64, Ordering::Greater);
+            let bitonic: Duration = start.elapsed();
+            y_axis_recursive.push(bitonic.as_micros() as f64);
+
+            x_axis.push(list_size as f64);
+        }
+
+        let ymin = y_axis_iterative.clone().into_iter()
+                                    .reduce(f64::min).unwrap()
+                                    .min(y_axis_recursive.clone().into_iter().reduce(f64::min).unwrap());
+
+        let ymax = y_axis_iterative.clone().into_iter()
+                                    .reduce(f64::max).unwrap()
+                                    .max(y_axis_recursive.clone().into_iter().reduce(f64::max).unwrap());
+
+
+        let root_area = BitMapBackend::new("./plot.st.large.comparative.random.png", (1200, 800)).into_drawing_area();
+        root_area.fill(&style::WHITE).unwrap();
+
+        let mut ctx = ChartBuilder::on(&root_area)
+                        .set_label_area_size(LabelAreaPosition::Left, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Bottom, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Right, 80.0)
+                        .set_label_area_size(LabelAreaPosition::Top, 80.0)
+                        .caption("Comparative Timings", ("sans-serif", 40.0))
+                        .build_cartesian_2d(XMINF..XMAXF, ymin..ymax)
+                        .unwrap();
+
+        ctx.configure_mesh()
+            .x_desc("List Size")
+            .y_desc("microseconds")
+            .draw()
+            .unwrap();
+
+        ctx.draw_series(
+            LineSeries::new(
+                    x_axis.clone()
+                                .iter()
+                                .zip(y_axis_iterative.clone().iter())
+                                .map(|(x,y)|{(*x, *y)} ),&style::GREEN))
+                .unwrap()
+                .label("Iterative")
+                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::GREEN)
+            );
+
+        ctx.draw_series(
+            LineSeries::new(
+                    x_axis.clone()
+                                .iter()
+                                .zip(y_axis_recursive.clone().iter())
+                                .map(|(x,y)|{(*x, *y)} ),&style::RED))
+                .unwrap()
+                .label("Recursive")
+                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::RED)
+            );
+
+        ctx.configure_series_labels()
+            .position(SeriesLabelPosition::UpperLeft)
+            .margin(20)
+            .legend_area_size(5)
+            .border_style(style::BLUE)
+            .background_style(style::BLUE.mix(0.1))
+            .label_font(("Calibri", 20))
+            .draw()
+            .unwrap();
+
+
+    }
+
+    pub fn image_comparative(parray: PixelArray<OrdinalPixel>) {
+
+        let width: u32       = parray.width.clone() as u32;
+        let height: u32      = parray.height.clone() as u32;
+        let pixel_count: i64 = width as i64 * height as i64;
+        
+        // Generate iterative sorting network.
+        let mut network = bitonic::network::Network::new(pixel_count as usize);
+        let network = network.set_comparitors().clone();
+
+        // Convert pixel array into a vector or pixels 
+        let mut array: Box<Vec<OrdinalPixel>> = parray.clone().pixels();
+        let start: Instant = Instant::now();
+        network.sort(&mut array).unwrap();
+        let iterative: Duration = start.elapsed();
+
+        let start: Instant = Instant::now();
+        let mut pixels_r = parray.clone().pixels().clone();
+        bitonic::recursive::sort(&mut pixels_r, 0 as i64, (width * height) as i64, Ordering::Greater);
+        let recursive: Duration = start.elapsed();
+
+        println!("Image Sort Timing:");
+        println!("\tIterative: {:?}\u{00B5}s", iterative);
+        println!("\tRecursive: {:?}\u{00B5}s", recursive);
+
+    }
+
+}
 
 
 pub mod pixels {
+    use std::sync::{Arc, Mutex};
     use std::{path::PathBuf};
     use std::cmp::Ordering;
 
+    /// Marker Trait to restrict T on PixelArray
+    pub trait Pixel {}
+
+    #[derive(Debug, Clone)]
+    pub struct AtomicOrdinalPixel {
+        pub pixel: Arc<Mutex<Vec<u8>>>,
+    } impl AtomicOrdinalPixel {
+        pub fn new(pixel: Vec<u8>) -> AtomicOrdinalPixel {
+            let locked_pixel = Mutex::new(pixel);
+            let arc_locked_pixel = Arc::new(locked_pixel);
+            AtomicOrdinalPixel { pixel: arc_locked_pixel }
+
+        }
+        
+        pub fn compare_and_swap(list: &mut [AtomicOrdinalPixel], i: usize, j: usize, direction: Ordering) {
+            list.swap(i, j);
+            
+
+        }
+
+        /// Deadlock (Meta-knowledge): a `Phase` of bitonic sort does not access the same
+        ///      pixel multiple times. Thus, for this application, this *should* be deadlock-free.
+        ///      In gereral however, this function is *NOT* deadlock-free.
+        /// NOTE: Locks are released automatically when pixel_<self, other> go out of scope.
+        #[inline(always)]
+        pub fn compare(a: &AtomicOrdinalPixel, b: &AtomicOrdinalPixel) -> Option<Ordering> {
+            let pixel_self: std::sync::MutexGuard<Vec<u8>> = a.pixel.lock().unwrap();
+            let pixel_other: std::sync::MutexGuard<Vec<u8>> = b.pixel.lock().unwrap();
+
+            let mut ordering: Option<Ordering> = None;
+            
+            for (a,b) in pixel_self.iter().zip(pixel_other.iter()).rev() {
+                if a == b { continue;                      } else 
+                if a < b  { ordering = Some(Ordering::Less)    } else 
+                if a > b  { ordering = Some(Ordering::Greater) }
+            }
+            if ordering.is_none() {
+                Some(Ordering::Equal);
+            }
+            ordering
+
+        }
+    } impl Pixel for AtomicOrdinalPixel {
+
+    } impl From<Vec<u8>> for AtomicOrdinalPixel {
+        fn from(pixel: Vec<u8>) -> Self{
+            AtomicOrdinalPixel::new(pixel)
+        }
+    } impl PartialOrd for AtomicOrdinalPixel {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+            AtomicOrdinalPixel::compare(self, other)
+        }
+    } impl Ord for AtomicOrdinalPixel {
+        fn cmp(&self, other: &Self) -> Ordering {
+            AtomicOrdinalPixel::compare(self, other).unwrap()
+        }
+    } impl PartialEq for AtomicOrdinalPixel {
+        fn eq(&self, other: &Self) -> bool {
+            self.cmp(&other).is_eq()
+        }
+    } impl Eq for AtomicOrdinalPixel {}
 
     #[derive(Debug, Clone)]
     pub struct OrdinalPixel {
@@ -20,41 +477,28 @@ pub mod pixels {
             OrdinalPixel { pixel, norm }
 
         }
+    } impl Pixel for OrdinalPixel {
     } impl From<Vec<u8>> for OrdinalPixel {
         fn from(pixel: Vec<u8>) -> Self{
             OrdinalPixel::new(pixel)
         }
     } impl PartialOrd for OrdinalPixel {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            match self.norm.partial_cmp(&other.norm).unwrap() {
-                Ordering::Less    => { return Some(Ordering::Less) },
-                Ordering::Greater => { return Some(Ordering::Greater) },
-                Ordering::Equal => {
-                    for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
-                        if a == b { continue;                      } else 
-                        if a < b  { return Some(Ordering::Less)    } else 
-                        if a > b  { return Some(Ordering::Greater) }
-                    }
-                    Some(Ordering::Equal)
-                }
+            for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
+                if a == b { continue;                      } else 
+                if a < b  { return Some(Ordering::Less)    } else 
+                if a > b  { return Some(Ordering::Greater) }
             }
+            Some(Ordering::Equal)
         }
     } impl Ord for OrdinalPixel {
         fn cmp(&self, other: &Self) -> Ordering {
-            match self.norm.partial_cmp(&other.norm).unwrap() {
-                Ordering::Less    => { return Ordering::Less },
-                Ordering::Greater => { return Ordering::Greater },
-                Ordering::Equal => {
-                    for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
-                        if a == b { continue;                } else 
-                        if a < b  { return Ordering::Less    } else 
-                        if a > b  { return Ordering::Greater }
-                    }
-                    Ordering::Equal
-                }
+            for (a,b) in self.pixel.iter().zip(other.pixel.iter()).rev() {
+                if a == b { continue;                } else 
+                if a < b  { return Ordering::Less    } else 
+                if a > b  { return Ordering::Greater }
             }
-
-            
+            Ordering::Equal
         }
     } impl PartialEq for OrdinalPixel {
         fn eq(&self, other: &Self) -> bool {
@@ -64,14 +508,15 @@ pub mod pixels {
 
 
    #[allow(dead_code)]
-    pub struct PixelArray {
+   #[derive(Clone)]
+    pub struct PixelArray<T: Pixel+Clone+From<Vec<u8>>> {
         pub height: usize,
         pub width: usize,
-        pixels: Box<Vec<OrdinalPixel>>,
+        pixels: Box<Vec<T>>,
         pixel_stride: usize
-    } impl PixelArray {
-        pub fn from_path(path: &PathBuf) -> PixelArray {
-            let img_buf = image::io::Reader::open(path).expect("Failed to open image")
+    } impl<T> PixelArray<T> where T: Pixel + Clone + From<Vec<u8>> {
+        pub fn from_path(path: &PathBuf) -> PixelArray<T> {
+            let img_buf: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> = image::io::Reader::open(path).expect("Failed to open image")
                                         .decode().expect("Failed to decode image")
                                         .into_rgba8();
 
@@ -80,12 +525,12 @@ pub mod pixels {
             let width = dim.0 as usize;
             let height = dim.1 as usize;
             let vector = img_buf.into_raw();
-            let mut pixels: Vec<OrdinalPixel> = Vec::with_capacity(vector.len() / pixel_dimensions);
+            let mut pixels: Vec<T> = Vec::with_capacity(vector.len() / pixel_dimensions);
             for i in 0..pixels.capacity() {
                 let pixel: Vec<u8> = vector[(i * 4).. (4 * i + 4)].to_vec();
-                pixels.push(OrdinalPixel::from(pixel));
+                pixels.push(T::from(pixel));
             }
-            let pixels: Box<Vec<OrdinalPixel>> = Box::new(pixels);
+            let pixels: Box<Vec<T>> = Box::new(pixels);
 
             let pixel_stride: usize= 4;
             PixelArray { 
@@ -94,14 +539,13 @@ pub mod pixels {
                 pixels,
                 pixel_stride
             }                            
-
         }
-
-        pub fn pixels(self) -> Box<Vec<OrdinalPixel>>{
+    
+        pub fn pixels(self) -> Box<Vec<T>>{
             self.pixels.clone()
         }
 
-        pub fn pixel(&self, w: usize, h: usize) -> OrdinalPixel {
+        pub fn pixel(&self, w: usize, h: usize) -> T {
             let index = self.width * h + w;
             self.pixels[index].clone()
         }
@@ -113,12 +557,14 @@ pub mod bitonic {
     pub mod network {
         use std::cmp::Ordering;
 
+        use crate::pixels::AtomicOrdinalPixel;
+
         #[derive(Debug, Clone)]
         pub struct Node {
             i: usize,
             j: usize,
             direction: Ordering
-        } impl Node {
+        } impl Node{
             #[inline(always)]
             pub fn new(i: usize, j: usize, direction: Ordering) -> Node {
                 Node {i, j, direction}
@@ -133,7 +579,7 @@ pub mod bitonic {
             pub fn details(&self) -> (usize, usize, Ordering) {
                 (self.i, self.j, self.direction)
             }
-        }
+        } 
 
         #[derive(Debug, Clone)]
         pub struct Group {
@@ -350,6 +796,8 @@ pub mod bitonic {
                 for phase in self.phases.iter() {
                     for group in phase.iter() {
                         let (start, end) = *group;
+                        if self.nodes[start..end].is_empty() { continue; }
+
                         for node in &self.nodes[start..end] {
                             let (i, j, direction): (usize, usize, Ordering) = node.details();
                             if list[i].partial_cmp(&list[j]) != Some(direction) {
@@ -496,8 +944,19 @@ mod multithreading {
     use rayon::*;
     use itertools::Itertools;
     use std::cmp::Ordering;
+    use std::sync::{Arc, mpsc};
+    use std::sync::{
+        
+        mpsc::{
+            Sender,
+            Receiver
+        }
+    };
     use std::time::Duration;
     use std::time::Instant;
+    use crate::bitonic::network::Node;
+    use crate::pixels::AtomicOrdinalPixel;
+
     use super::bitonic;
 
     #[test]
@@ -520,58 +979,98 @@ mod multithreading {
         assert!(uniq.len() != 1, "Only {} unique TID: {}", uniq.len(), uniq[0]);
     }
 
-/*
     #[test]
     fn simple_node_sort_random() {
-        use rand::{distributions::Standard, Rng};
+        // use rand::{distributions::Standard, Rng};
 
-        let cores = num_cpus::get();
-        let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
+        // let cores: usize = num_cpus::get();
+        // let pool: ThreadPool = ThreadPoolBuilder::new().num_threads(2 /*cores*/).build().unwrap();
     
-        for list_size in (100..=500).step_by(100) {
-            let mut test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
-            let mut expected: Vec<u64> = test_vector.clone();
+        // for list_size in (10..11).step_by(1) {
+        //     let mut test_vector: Vec<AtomicOrdinalPixel> = Vec::with_capacity(list_size);
+        //     for _ in 0..list_size {
+        //         let pixel: Vec<u8> =  rand::thread_rng().sample_iter(Standard).take(4).collect();
+        //         test_vector.push(AtomicOrdinalPixel::new(pixel));
+        //     }
+        //     println!("Created Test Vector!");
 
-            let start: Instant = Instant::now();
-            let mut sorting_network = bitonic::network::Network::new(list_size);
-            let sorting_network = sorting_network.set_input_length(list_size).set_comparitors();
-            let duration: Duration = start.elapsed();
-            println!("Time spent generating sorting network: {:?}", duration);
+        //     let mut expected: Vec<AtomicOrdinalPixel> = test_vector.clone();
+        //     let start: Instant = Instant::now();
+        //     expected.sort();
+        //     let rust_sort: Duration = start.elapsed();
+        //     expected.reverse();
 
-            let nodes = sorting_network.nodes.clone();
+        //     println!("Created Expected Vector!");
 
-            let start: Instant = Instant::now();
-            for group in sorting_network.phases.iter() {
-                for (start, stop) in group.iter() {
-                    for node in *start..*stop {
-                        pool.install(|| {
-                                    let (i, j, direction): (usize, usize, Ordering) = nodes[node].details();
-                                    if test_vector[i].partial_cmp(&test_vector[j]) != Some(direction) {
-                                        test_vector.swap(i, j);
-                                    }
-                        });
-                    }
-                }
 
-            }
-            let bitonic: Duration = start.elapsed();
+        //     let start: Instant = Instant::now();
+        //     let mut sorting_network: bitonic::network::Network = bitonic::network::Network::new(list_size);
+        //     let sorting_network: &bitonic::network::Network = sorting_network.set_input_length(list_size).set_comparitors();
+        //     let duration: Duration = start.elapsed();
+        //     println!("Time spent generating sorting network: {:?}", duration);
 
-            let start: Instant = Instant::now();
-            expected.sort();
-            let rust_sort: Duration = start.elapsed();
+        //     let nodes: Box<[bitonic::network::Node]> = sorting_network.nodes.clone();
+        //     println!("Got list of sorting network nodes");
 
-            println!("Sort time:\n\tBitonic: {:?}, .sort: {:?}", bitonic, rust_sort);
-            expected.reverse();
+        //     let tv = Arc::new(test_vector);
+        //     let (tx, rx): (Sender<Vec<AtomicOrdinalPixel>>, Receiver<Vec<AtomicOrdinalPixel>>) = mpsc::channel();
+            
 
-            for (i,(x,y)) in test_vector.iter().zip(expected.iter()).enumerate(){
-                if x!= y {
-                    println!("[{} of {}] {} != {}",i, list_size, x, y);
-                }
-            }
-            assert_eq!(test_vector, expected);
-        }
+        //     let start: Instant = Instant::now();
+        //     for groups in sorting_network.phases.iter() {
+        //         println!("Its a whole new phase!");
+                
+                
+
+        //         let mut work: Vec<Vec<AtomicOrdinalPixel>> = Vec::with_capacity(groups.len() as usize);
+        //         for thread_work in groups.iter() {
+        //             let start: usize = thread_work.0;
+        //             let stop: usize  = thread_work.1;
+        //             let thread_work: &[Node] = &nodes[start..stop].to_vec();
+        //             if !thread_work.is_empty() {
+        //                 let min_node_index: usize = thread_work.iter().map(|x| x.details().0).min().unwrap();
+        //                 let max_node_index: usize = thread_work.iter().map(|x| x.details().1).max().unwrap();
+        //                 let t_work = Vec::with_capacity(max_node_index - min_node_index);
+        //             }
+
+        //         }
+
+
+                    
+                //     let start: usize = thread_work.0;
+                //     let stop: usize  = thread_work.1;
+                //     let thread_work: &[Node] = &nodes[start..stop];
+                //     if !thread_work.is_empty() {
+                //         let min_node_index: usize = thread_work.iter().map(|x| x.details().0).min().unwrap();
+                //         let max_node_index: usize = thread_work.iter().map(|x| x.details().1).max().unwrap();
+
+                //         let mut tv_clone  = &test_vector[start..stop].to_vec();
+
+                //         pool.scope(|s| {
+                //             s.spawn(move|_| {
+                //                 println!("TID: {}", self::current_thread_index().unwrap());
+                //                 println!("\tGroup:             ({}, {})", start, stop );
+                //                 println!("\tNode Index Bounds: ({}, {})", min_node_index, max_node_index);
+                //                 println!("\nNodes:              {:?}", thread_work);
+
+                //                 for cas in thread_work.iter() {
+                //                     let (i,j,direction) = cas.details();
+                //                     AtomicOrdinalPixel::compare_and_swap(&mut tv_clone, i, j, direction);
+                //                 }
+                //             });
+                //         });
+                //     }
+                // }
+
+            // }
+            // let bitonic: Duration = start.elapsed();
+
+            // println!("Sort time ({}):\n\tBitonic: {:?}, .sort: {:?}", list_size, bitonic, rust_sort);
+
+
+            //assert_eq!(test_vector, expected);
+        // }
     }
-*/
 
     #[test]
     fn simple_group_sort_random() {
@@ -946,22 +1445,25 @@ mod sorting {
 
 #[cfg(test)]
 mod io {
-    use super::pixels::*;
+    use super::pixels::{
+        OrdinalPixel,
+        PixelArray,
+    };
     use std::{path::Path};
 
     #[test]
     fn read_multi_pixel() {
         let test_file = "./src/test_files/multi_pixel.png";
-        let pixel_array = PixelArray::from_path(&Path::new(test_file).to_path_buf());
-        let img_buf = image::io::Reader::open(test_file).expect("Failed to open image")
+        let pixel_array: PixelArray<OrdinalPixel> = PixelArray::from_path(&Path::new(test_file).to_path_buf());
+        let img_buf: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> = image::io::Reader::open(test_file).expect("Failed to open image")
                                     .decode().expect("Failed to decode image")
                                     .into_rgba8();
 
         // Transparent (0,0)
         for w in 0..800 {
             for h in 0..800 {
-                let p1 = pixel_array.pixel(w,h);
-                let p2 = img_buf.get_pixel(w as u32, h as u32);
+                let p1: OrdinalPixel = pixel_array.pixel(w,h);
+                let p2: &image::Rgba<u8> = img_buf.get_pixel(w as u32, h as u32);
                 assert_eq!(p1.pixel[0], p2[0]);
                 assert_eq!(p1.pixel[1], p2[1]);
                 assert_eq!(p1.pixel[2], p2[2]);
