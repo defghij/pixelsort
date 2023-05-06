@@ -26,7 +26,8 @@ pub mod timing {
         }, 
         cmp::Ordering
     };
-    use rayon::*;
+
+    use crate::{pixels::AtomicOrdinalPixel, multithreading::WorkSite};
 
     use super::pixels::{
         PixelArray,
@@ -47,113 +48,117 @@ pub mod timing {
 
     pub fn small_single_vs_multi_thread_random_data_comparative() {
 
-        let mut y_axis_single: Vec<f64> = Vec::new();
-        let mut y_axis_multi: Vec<f64> = Vec::new();
-        let mut x_axis: Vec<f64> = Vec::new();
+        // let mut y_axis_single: Vec<f64> = Vec::new();
+        // let mut y_axis_multi: Vec<f64> = Vec::new();
+        // let mut x_axis: Vec<f64> = Vec::new();
+
+        // let cores: usize = num_cpus::get_physical();
+        // let worker_count: usize = cores - 1; // Dont consume all the physical cores. Leave some for the rest of us.
 
 
-        for list_size in (XMIN..=XMAX).step_by(1) {
-            let test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
+        // for list_size in (XMIN..=XMAX).step_by(1) {
+        //     let test_vector: Vec<u64> = rand::thread_rng().sample_iter(Standard).take(list_size).collect();
 
-            let mut sorting_network = bitonic::network::Network::new(XMAX);
-            let sorting_network = sorting_network.set_input_length(list_size).set_comparitors();
-
-
-            let mut singlethread_tv: Vec<u64>         = test_vector.clone(); // Copy the test vector so we dont taint the data
-            let network: bitonic::network::Network = sorting_network.clone();
-            let start: Instant                     = Instant::now();
-
-            // Do the sort, while being timed
-            let iterative_network: bitonic::network::Network = network.clone();
-            iterative_network.sort(&mut singlethread_tv).unwrap();
-            let bitonic: Duration = start.elapsed();
-            y_axis_single.push(bitonic.as_micros() as f64);
+        //     let mut sorting_network = bitonic::network::Network::new(XMAX);
+        //     let sorting_network = sorting_network.set_input_length(list_size).set_comparitors();
 
 
-            let iterative_network: bitonic::network::Network = network.clone();
-            let nodes: Box<[bitonic::network::Node]> = iterative_network.nodes.clone();
-            let mut multithreaded_tv: Vec<u64>       = test_vector.clone(); // Copy the test vector so we dont taint the data
-            let cores = num_cpus::get();
-            let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
-            
-            let start: Instant = Instant::now();
-            for group in sorting_network.phases.iter() {
-                for (start, stop) in group.iter() {
-                    for node in *start..*stop {
-                        pool.install(|| {
-                                    let (i, j, direction): (usize, usize, Ordering) = nodes[node].details();
-                                    if multithreaded_tv[i].partial_cmp(&multithreaded_tv[j]) != Some(direction) {
-                                        multithreaded_tv.swap(i, j);
-                                    }
-                        });
-                    }
-                }
-
-            }
-            let bitonic: Duration = start.elapsed();
-            y_axis_multi.push(bitonic.as_micros() as f64);
-
-            x_axis.push(list_size as f64);
-        }
-
-        let ymin = y_axis_single.clone().into_iter()
-                                    .reduce(f64::min).unwrap()
-                                    .min(y_axis_multi.clone().into_iter().reduce(f64::min).unwrap());
-
-        let ymax = y_axis_single.clone().into_iter()
-                                    .reduce(f64::max).unwrap()
-                                    .max(y_axis_multi.clone().into_iter().reduce(f64::max).unwrap());
+        //     let mut singlethread_tv: Vec<u64>         = test_vector.clone(); // Copy the test vector so we dont taint the data
+        //     let network: bitonic::network::Network = sorting_network.clone();
 
 
-        let root_area = BitMapBackend::new("./plot.st_and_mt.small.comparative.random.png", (1200, 800)).into_drawing_area();
-        root_area.fill(&style::WHITE).unwrap();
+        //     // SINGLE-THREADED IMPLEMENTATION-----------------------------------------------------------------
+        //     let start: Instant = Instant::now(); // START-----------------------------------------------------
 
-        let mut ctx = ChartBuilder::on(&root_area)
-                        .set_label_area_size(LabelAreaPosition::Left, 80.0)
-                        .set_label_area_size(LabelAreaPosition::Bottom, 80.0)
-                        .set_label_area_size(LabelAreaPosition::Right, 80.0)
-                        .set_label_area_size(LabelAreaPosition::Top, 80.0)
-                        .caption("Comparative Timings", ("sans-serif", 40.0))
-                        .build_cartesian_2d(XMINF..XMAXF, ymin..ymax)
-                        .unwrap();
+        //     let single_network: bitonic::network::Network = network.clone();
+        //     single_network.sort(&mut singlethread_tv).unwrap();
+        //     let bitonic: Duration = start.elapsed(); // END---------------------------------------------------
+        //     y_axis_single.push(bitonic.as_micros() as f64);
 
-        ctx.configure_mesh()
-            .x_desc("List Size")
-            .y_desc("microseconds")
-            .draw()
-            .unwrap();
 
-        ctx.draw_series(
-            LineSeries::new(
-                    x_axis.clone()
-                                .iter()
-                                .zip(y_axis_single.clone().iter())
-                                .map(|(x,y)|{(*x, *y)} ),&style::GREEN))
-                .unwrap()
-                .label("Iterative::Single-Threaded")
-                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::GREEN)
-            );
+        //     let multi_network: bitonic::network::Network = network.clone();
+        //     let nodes: Box<[bitonic::network::Node]> = multi_network.nodes.clone();
+        //     let mut mt_tv: Vec<u64>       = test_vector.clone(); // Copy the test vector so we dont taint the data
 
-        ctx.draw_series(
-            LineSeries::new(
-                    x_axis.clone()
-                                .iter()
-                                .zip(y_axis_multi.clone().iter())
-                                .map(|(x,y)|{(*x, *y)} ),&style::RED))
-                .unwrap()
-                .label("Iterative::Multi-Threaded")
-                .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::RED)
-            );
 
-        ctx.configure_series_labels()
-            .position(SeriesLabelPosition::UpperLeft)
-            .margin(20)
-            .legend_area_size(5)
-            .border_style(style::BLUE)
-            .background_style(style::BLUE.mix(0.1))
-            .label_font(("Calibri", 20))
-            .draw()
-            .unwrap();
+        //     // MULTI-THREADED IMPLIMENTATION------------------------------------------------------------------
+        //     let start: Instant = Instant::now(); // START-----------------------------------------------------
+
+        //     for group in multi_network.phases.iter() {
+        //         for (start, stop) in group.iter() {
+
+        //             let worker_site: WorkSite<AtomicOrdinalPixel> = WorkSite::new(worker_count);
+        //             let results: Vec<Vec<AtomicOrdinalPixel>> = worker_site.set_project(process_data)
+        //                                                                 .stage_packages(data_pool)
+        //                                                                 .execute()
+        //                                                                 .unwrap();
+        //         }
+        //     }
+
+        //     let bitonic: Duration = start.elapsed(); // END---------------------------------------------------
+        //     y_axis_multi.push(bitonic.as_micros() as f64);
+
+        //     x_axis.push(list_size as f64);
+        // }
+
+        // let ymin = y_axis_single.clone().into_iter()
+        //                             .reduce(f64::min).unwrap()
+        //                             .min(y_axis_multi.clone().into_iter().reduce(f64::min).unwrap());
+
+        // let ymax = y_axis_single.clone().into_iter()
+        //                             .reduce(f64::max).unwrap()
+        //                             .max(y_axis_multi.clone().into_iter().reduce(f64::max).unwrap());
+
+
+        // let root_area = BitMapBackend::new("./plot.st_and_mt.small.comparative.random.png", (1200, 800)).into_drawing_area();
+        // root_area.fill(&style::WHITE).unwrap();
+
+        // let mut ctx = ChartBuilder::on(&root_area)
+        //                 .set_label_area_size(LabelAreaPosition::Left, 80.0)
+        //                 .set_label_area_size(LabelAreaPosition::Bottom, 80.0)
+        //                 .set_label_area_size(LabelAreaPosition::Right, 80.0)
+        //                 .set_label_area_size(LabelAreaPosition::Top, 80.0)
+        //                 .caption("Comparative Timings", ("sans-serif", 40.0))
+        //                 .build_cartesian_2d(XMINF..XMAXF, ymin..ymax)
+        //                 .unwrap();
+
+        // ctx.configure_mesh()
+        //     .x_desc("List Size")
+        //     .y_desc("microseconds")
+        //     .draw()
+        //     .unwrap();
+
+        // ctx.draw_series(
+        //     LineSeries::new(
+        //             x_axis.clone()
+        //                         .iter()
+        //                         .zip(y_axis_single.clone().iter())
+        //                         .map(|(x,y)|{(*x, *y)} ),&style::GREEN))
+        //         .unwrap()
+        //         .label("Iterative::Single-Threaded")
+        //         .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::GREEN)
+        //     );
+
+        // ctx.draw_series(
+        //     LineSeries::new(
+        //             x_axis.clone()
+        //                         .iter()
+        //                         .zip(y_axis_multi.clone().iter())
+        //                         .map(|(x,y)|{(*x, *y)} ),&style::RED))
+        //         .unwrap()
+        //         .label("Iterative::Multi-Threaded")
+        //         .legend(|(x,y)| Rectangle::new([(x - 15, y + 1), (x, y)], style::RED)
+        //     );
+
+        // ctx.configure_series_labels()
+        //     .position(SeriesLabelPosition::UpperLeft)
+        //     .margin(20)
+        //     .legend_area_size(5)
+        //     .border_style(style::BLUE)
+        //     .background_style(style::BLUE.mix(0.1))
+        //     .label_font(("Calibri", 20))
+        //     .draw()
+        //     .unwrap();
 
     }
 
@@ -412,34 +417,62 @@ pub mod pixels {
             let locked_pixel = Mutex::new(pixel);
             let arc_locked_pixel = Arc::new(locked_pixel);
             AtomicOrdinalPixel { pixel: arc_locked_pixel }
-
         }
         
-        pub fn compare_and_swap(list: &mut [AtomicOrdinalPixel], i: usize, j: usize, direction: Ordering) {
-            list.swap(i, j);
-            
+        // pub fn compare_and_swap(list: &mut [AtomicOrdinalPixel], i: usize, j: usize, direction: Ordering) {
+        //     unimplemented!()
+        // }
 
-        }
-
-        /// Deadlock (Meta-knowledge): a `Phase` of bitonic sort does not access the same
-        ///      pixel multiple times. Thus, for this application, this *should* be deadlock-free.
-        ///      In gereral however, this function is *NOT* deadlock-free.
+        /// Deadlock (Meta-knowledge): In general this _could_ deadlock if the first check
+        ///     that compares the pointer values was not present. However,
+        ///     a `Phase` of bitonic sort does not access the same pixel multiple times.
+        ///     Thus, for this application, this *should* be deadlock-free.
         /// NOTE: Locks are released automatically when pixel_<self, other> go out of scope.
         #[inline(always)]
         pub fn compare(a: &AtomicOrdinalPixel, b: &AtomicOrdinalPixel) -> Option<Ordering> {
+            // let mut std_out: String = String::new();
+            // std_out += "Comparing:\n";
+
+            // Check to see if `a` and `b` refer to the same memory address.
+            //      If they do then they are equal be definition. If this check weren't
+            //      here then we might end up acquiring a lock from `a` on the address `A`
+            //      and the second attempt to acquire the lock on `b` at address `A` should
+            //      deadlock as `A` is held by the mutex guard from `a`.
+            //
+            // This check is safe, send, and sync as we never mutate the underlying
+            //      memory and the Arc reference count is decreased as needed when
+            //      the check returns if they refer to the same memory.
+            if Arc::as_ptr(&a.pixel) == Arc::as_ptr(&b.pixel) {
+                // std_out += &format!("Pointers are identical: equal!\n");
+                // std_out += &format!("\nL({:?})\n",Arc::as_ptr(&a.pixel));
+                // std_out += &format!("\nR({:?})\n",Arc::as_ptr(&b.pixel));
+                // println!("{}\n", std_out);
+                return Some(Ordering::Equal);
+            }
+
+            // std_out += &format!("\t\tAcquiring Locks\n"); 
             let pixel_self: std::sync::MutexGuard<Vec<u8>> = a.pixel.lock().unwrap();
             let pixel_other: std::sync::MutexGuard<Vec<u8>> = b.pixel.lock().unwrap();
-
-            let mut ordering: Option<Ordering> = None;
+            // std_out += &format!("\t\tAcquiredLocks\n"); 
             
+            // std_out += &format!("\tValues:\n"); 
+            // for (i,e) in pixel_self.iter().zip(pixel_other.iter()).rev().enumerate() {
+            //     std_out += &format!("\t\t[{}] {} & {}, {:?}\n",i, e.0, e.1, e.0.cmp(&e.1)); 
+            // }
+            
+            let mut ordering: Option<Ordering> = None;
+
+            // std_out += &format!("\t\tComapring vectors\n"); 
             for (a,b) in pixel_self.iter().zip(pixel_other.iter()).rev() {
-                if a == b { continue;                      } else 
-                if a < b  { ordering = Some(Ordering::Less)    } else 
-                if a > b  { ordering = Some(Ordering::Greater) }
+                if a == b { /* Need to check other elements */ continue; } else 
+                if a < b  { ordering = Some(Ordering::Less);      break; } else 
+                if a > b  { ordering = Some(Ordering::Greater);   break; }
             }
-            if ordering.is_none() {
-                Some(Ordering::Equal);
-            }
+            if ordering.is_none() { Some(Ordering::Equal); }
+            // std_out += &format!("\tOrdering: {:?}\n", ordering); 
+            // std_out += &format!("\t\tL({:?})\n",a.pixel);
+            // std_out += &format!("\t\tR({:?})\n",b.pixel);
+            // println!("{}\n", std_out);
             ordering
 
         }
@@ -557,8 +590,6 @@ pub mod bitonic {
     pub mod network {
         use std::cmp::Ordering;
 
-        use crate::pixels::AtomicOrdinalPixel;
-
         #[derive(Debug, Clone)]
         pub struct Node {
             i: usize,
@@ -662,6 +693,7 @@ pub mod bitonic {
         use std::cmp::Ordering;
         use super::helper::greatest_power_of_two_less_than;
         use super::network;
+
 
         pub fn sort<T: PartialOrd>(list: &mut Vec<T>, lo: i64, n: i64, dir: Ordering) {
             if n > 1 {
@@ -771,7 +803,11 @@ pub mod bitonic {
     }
 
     pub mod iterative {
-        use std::cmp::Ordering;
+        use std::{cmp::Ordering, mem::swap};
+
+        use rayon::{ prelude::{IntoParallelRefIterator, ParallelIterator}};
+
+        use crate::{ pixels::AtomicOrdinalPixel};
 
         use super::{
             network::{
@@ -786,6 +822,54 @@ pub mod bitonic {
         }
 
         impl Network {
+            pub fn sort_multithreaded(mut self, list: &'static mut [AtomicOrdinalPixel]) -> Result<&'static mut [AtomicOrdinalPixel], &str>{
+                if !self.comparitors_set { return Err("Network comparitors not set!"); }
+
+                self.wires_real = list.len() - 1;
+                //let cores: usize = num_cpus::get_physical();
+                //let worker_count: usize = cores - 1; // Dont consume all the physical cores. Leave some for the rest of us.
+                //let worker_pool: ThreadPool = ThreadPoolBuilder::new().num_threads(worker_count).build().unwrap();
+
+                for phase in self.phases.iter() {
+                    let mut work_units: Vec< (&[AtomicOrdinalPixel],Vec<Node>) > = Vec::with_capacity(phase.len());
+                    for (start, stop) in phase.iter() {
+                        let work = self.nodes[*start..*stop].to_vec();    
+                        work_units.push( (list, work) );
+                    }
+                    work_units.par_iter().for_each(|data| {
+                        let list = &data.0;
+                        let nodes = &data.1;
+                        for node in nodes {
+                            let (i, j, direction): (usize, usize, Ordering) = node.details();
+                            if list[i].partial_cmp(&list[j]) != Some(direction) {
+                                let mut a = list[i].pixel.lock().unwrap();
+                                let mut b = list[j].pixel.lock().unwrap();
+
+                                std::mem::swap(&mut *a, &mut *b);
+                            }
+
+
+                        }
+                    });
+                }
+                
+                //     for group in phase.iter() {
+                //        let worker_site: WorkSite<AtomicOrdinalPixel> = WorkSite::new(worker_count);
+                //         let lts: Vec<Vec<AtomicOrdinalPixel>> = worker_site.set_project(process_data)
+                //                                                             .stage_packages(data_pool)
+                //                                                             .execute()
+                //                                                             .unwrap();
+
+                //         for node in &self.nodes[start..end] {
+                //             let (i, j, direction): (usize, usize, Ordering) = node.details();
+                //             if list[i].partial_cmp(&list[j]) != Some(direction) {
+                //                 list.swap(i, j);
+                //             }
+                //         }
+                //     }
+
+                Ok(list)
+            }
 
             pub fn sort<T: PartialOrd>(mut self, list: &mut Vec<T>) -> Result<&mut Vec<T>, &str>{
                 if !self.comparitors_set { return Err("Network comparitors not set!"); }
@@ -931,22 +1015,105 @@ pub mod bitonic {
 
             if k < 1  || i64::MAX < k.into() { return Err("resulting value out of range"); }
             else {                      return Ok(k.into()); }
+        }
+    }
+}
 
-            
+pub mod multithreading {
+    use std::sync::{
+        mpsc,
+        mpsc::{
+            Sender,
+            Receiver
+        }
+    };
+    use rayon::*;
+
+    trait PackageProcessing<T> {
+        fn process(&self, data: Vec<T>) -> Vec<T>;
+    }
+    struct Mail<T: Clone + Send + Sync> {
+        pub outbound: Sender<Vec<T>>,
+        pub inbound: Receiver<Vec<T>>
+    } impl<T> Mail<T> where T: Clone + Send + Sync {
+        pub fn new() -> Mail<T> {
+            let (tx,rx): (Sender<Vec<T>>, Receiver<Vec<T>>) = mpsc::channel();
+            Mail { outbound: tx, inbound: rx }
+        }
+    }
+
+    pub struct WorkSite<T: Clone + Send + Sync + 'static> {
+        worker_pool: ThreadPool,
+        mail: Mail<T>,
+        process: Option<fn(Vec<T>) -> Vec<T>>,
+        packages: Option<Vec<Vec<T>>>,
+    } impl<T> WorkSite<T>  where T: Clone + Send + Sync {
+        pub fn new(worker_count: usize) -> WorkSite<T> {
+            let worker_pool: ThreadPool = ThreadPoolBuilder::new().num_threads(worker_count).build().unwrap();
+            let mail: Mail<T> = Mail::new();
+            WorkSite { worker_pool, mail, process: None, packages: None}
         }
 
+        pub fn set_project(mut self, process: fn(Vec<T>)->Vec<T>) -> Self {
+            self.process = Some(process);
+            self
+        }
 
+        pub fn stage_packages(mut self, data: Vec<Vec<T>>) -> Self {
+            self.packages = Some(data);
+            self
+        }
+
+        pub fn execute(self) -> Option<Vec<Vec<T>>> {
+            if self.packages.is_none() {
+                panic!("No packages staged!");
+            } 
+            if self.process.is_none() {
+                panic!("No package processing function set!");
+            }
+
+            // Worksite preparation 
+            let process: fn(Vec<T>) -> Vec<T> = self.process.unwrap();
+            let packages: Vec<Vec<T>>                = self.packages.clone().unwrap();
+            let package_count: usize                 = packages.len();
+            let outgoing_mailbox: Sender<Vec<T>>     = self.mail.outbound;
+            let inbound_mailbox: Receiver<Vec<T>>    = self.mail.inbound;
+
+            // Start assigning workers to packages
+            for package in packages.iter() {
+
+                // Give each worker their own reference to their package and mailbox
+                let worker_local_package: Vec<T> = package.clone();
+                let worker_local_mailbox: Sender<Vec<T>> = outgoing_mailbox.clone();
+
+                // Let worker start doing what they do.
+                self.worker_pool.spawn(move || {
+                    let result: Vec<T> = process(worker_local_package);
+                    worker_local_mailbox.send(result).unwrap();
+                });
+            } 
+            drop(outgoing_mailbox); // Close the outgoing mailbox signalling all workers are finished.
+
+            // Collect all the package from the workers.
+            let mut packages: Vec<Vec<T>> = Vec::with_capacity(package_count);
+
+            for received_package in inbound_mailbox {
+                packages.push(received_package);
+            }
+            Some(packages)
+        }
     }
 }
 
 #[cfg(test)]
-mod multithreading {
+mod multithreading_tests {
+    use rand::Rng;
+    use rand::distributions::Standard;
     use rayon::*;
     use itertools::Itertools;
     use std::cmp::Ordering;
-    use std::sync::{Arc, mpsc};
     use std::sync::{
-        
+        mpsc,
         mpsc::{
             Sender,
             Receiver
@@ -954,10 +1121,10 @@ mod multithreading {
     };
     use std::time::Duration;
     use std::time::Instant;
-    use crate::bitonic::network::Node;
-    use crate::pixels::AtomicOrdinalPixel;
 
+    use super::pixels::AtomicOrdinalPixel;
     use super::bitonic;
+    use super::multithreading::WorkSite;
 
     #[test]
     fn simple_mt_pool() {
@@ -980,97 +1147,311 @@ mod multithreading {
     }
 
     #[test]
-    fn simple_node_sort_random() {
-        // use rand::{distributions::Standard, Rng};
+    fn channel_mpsc_vec_of_vec_u64() {
+        // Worker function which will be called by worker threads.
+        fn process_vec(mut data: Vec<u64>, tid: usize) -> Vec<u64> {
+            for x in data.iter_mut() {
+                *x = tid as u64;
+            }
+            data
+        }
+        // Set up thread pool and MPSC channel.
+        // Note: Map, at most, one thread per core (or hyper thread).
+        let cores: usize = num_cpus::get();
+        let thread_scope_pool: ThreadPool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
+        let (tx,rx): (Sender<Vec<u64>>, Receiver<Vec<u64>>) = mpsc::channel();
 
-        // let cores: usize = num_cpus::get();
-        // let pool: ThreadPool = ThreadPoolBuilder::new().num_threads(2 /*cores*/).build().unwrap();
-    
-        // for list_size in (10..11).step_by(1) {
-        //     let mut test_vector: Vec<AtomicOrdinalPixel> = Vec::with_capacity(list_size);
-        //     for _ in 0..list_size {
-        //         let pixel: Vec<u8> =  rand::thread_rng().sample_iter(Standard).take(4).collect();
-        //         test_vector.push(AtomicOrdinalPixel::new(pixel));
-        //     }
-        //     println!("Created Test Vector!");
+        // Generate random data for our worker threads to modify        
+        let mut data_pool: Vec<Vec<u64>> = Vec::with_capacity(cores);
+        for _ in 0..cores {
+            data_pool.push(rand::thread_rng().sample_iter(Standard).take(4).collect());
+        }
 
-        //     let mut expected: Vec<AtomicOrdinalPixel> = test_vector.clone();
-        //     let start: Instant = Instant::now();
-        //     expected.sort();
-        //     let rust_sort: Duration = start.elapsed();
-        //     expected.reverse();
+        // Set original data to compare against.
+        let original_data = data_pool.clone();
+        println!("Pool of Data (pre): {:?}", original_data);
 
-        //     println!("Created Expected Vector!");
+        // For each work unit in the data pool we shall
+        //  clone a copy for the worker thread and spawn
+        //  the worker thread to operate on it. 
+        for data in data_pool {
+            // Set up thread local copies.
+            let thread_local_data: Vec<u64> = data.clone();
+            let thread_local_channel: Sender<Vec<u64>> = tx.clone();
 
+            // Spawn threads to do the work.
+            thread_scope_pool.spawn(move || {
+                let result: Vec<u64> = process_vec(thread_local_data, self::current_thread_index().unwrap());
+                thread_local_channel.send(result).unwrap();
+            });
+        } 
+        drop(tx); // Close the channel
 
-        //     let start: Instant = Instant::now();
-        //     let mut sorting_network: bitonic::network::Network = bitonic::network::Network::new(list_size);
-        //     let sorting_network: &bitonic::network::Network = sorting_network.set_input_length(list_size).set_comparitors();
-        //     let duration: Duration = start.elapsed();
-        //     println!("Time spent generating sorting network: {:?}", duration);
+        // Receive the thread modified data
+        let mut modified_data: Vec<Vec<u64>> = Vec::with_capacity(cores);
+        for received_data in rx {
+            modified_data.push(received_data);
+        }
 
-        //     let nodes: Box<[bitonic::network::Node]> = sorting_network.nodes.clone();
-        //     println!("Got list of sorting network nodes");
+        // Print and verify all data was modified by worker threads.
+        println!("Received Vec: {:?}", modified_data);
+        for (o,m) in original_data.iter().zip(modified_data.iter()) {
+            assert_ne!(o, m);
 
-        //     let tv = Arc::new(test_vector);
-        //     let (tx, rx): (Sender<Vec<AtomicOrdinalPixel>>, Receiver<Vec<AtomicOrdinalPixel>>) = mpsc::channel();
-            
-
-        //     let start: Instant = Instant::now();
-        //     for groups in sorting_network.phases.iter() {
-        //         println!("Its a whole new phase!");
-                
-                
-
-        //         let mut work: Vec<Vec<AtomicOrdinalPixel>> = Vec::with_capacity(groups.len() as usize);
-        //         for thread_work in groups.iter() {
-        //             let start: usize = thread_work.0;
-        //             let stop: usize  = thread_work.1;
-        //             let thread_work: &[Node] = &nodes[start..stop].to_vec();
-        //             if !thread_work.is_empty() {
-        //                 let min_node_index: usize = thread_work.iter().map(|x| x.details().0).min().unwrap();
-        //                 let max_node_index: usize = thread_work.iter().map(|x| x.details().1).max().unwrap();
-        //                 let t_work = Vec::with_capacity(max_node_index - min_node_index);
-        //             }
-
-        //         }
-
-
-                    
-                //     let start: usize = thread_work.0;
-                //     let stop: usize  = thread_work.1;
-                //     let thread_work: &[Node] = &nodes[start..stop];
-                //     if !thread_work.is_empty() {
-                //         let min_node_index: usize = thread_work.iter().map(|x| x.details().0).min().unwrap();
-                //         let max_node_index: usize = thread_work.iter().map(|x| x.details().1).max().unwrap();
-
-                //         let mut tv_clone  = &test_vector[start..stop].to_vec();
-
-                //         pool.scope(|s| {
-                //             s.spawn(move|_| {
-                //                 println!("TID: {}", self::current_thread_index().unwrap());
-                //                 println!("\tGroup:             ({}, {})", start, stop );
-                //                 println!("\tNode Index Bounds: ({}, {})", min_node_index, max_node_index);
-                //                 println!("\nNodes:              {:?}", thread_work);
-
-                //                 for cas in thread_work.iter() {
-                //                     let (i,j,direction) = cas.details();
-                //                     AtomicOrdinalPixel::compare_and_swap(&mut tv_clone, i, j, direction);
-                //                 }
-                //             });
-                //         });
-                //     }
-                // }
-
-            // }
-            // let bitonic: Duration = start.elapsed();
-
-            // println!("Sort time ({}):\n\tBitonic: {:?}, .sort: {:?}", list_size, bitonic, rust_sort);
-
-
-            //assert_eq!(test_vector, expected);
-        // }
+        }
     }
+
+    #[test]
+    fn channel_mpsc_with_worksite() {
+
+        fn process_data(mut data: Vec<u64>) -> Vec<u64> {
+            for x in data.iter_mut() {
+                *x = 0;
+            }
+            data
+        }
+
+        // Set up thread pool and MPSC channel.
+        // Note: Map, at most, one thread per core (or hyper thread).
+
+        // Generate random data for our worker threads to modify
+        let work_count: usize = 16;
+        let mut data_pool: Vec<Vec<u64>> = Vec::with_capacity(work_count);
+        for _ in 0..work_count {
+            data_pool.push(rand::thread_rng().sample_iter(Standard).take(4).collect());
+        }
+        // Set original data to compare against.
+        let original_data: Vec<Vec<u64>> = data_pool.clone();
+        println!("Pool of Data (pre): {:?}\n", original_data);
+        
+        let cores: usize = num_cpus::get_physical();
+        let worker_count: usize = cores - 1; // Dont consume all the physical cores. Leave some for the rest of us.
+        let worker_site: WorkSite<u64> = WorkSite::new(worker_count);
+        let results: Vec<Vec<u64>> = worker_site.set_project(process_data)
+                                                .stage_packages(data_pool)
+                                                .execute()
+                                                .unwrap();
+
+
+        // Print and verify all data was modified by worker threads.
+        println!("Received Vec: {:?}", results);
+        for (o,m) in original_data.iter().zip(results.iter()) {
+            assert_ne!(o, m);
+        }
+    }
+
+    #[test]
+    fn channel_mpsc_random_pixel_sort() {
+        // Below trait and two structs (Mail & WorkSite) are lifted from the `multithreading` 
+        // module and modified to suit this test. In fact, they are here in their original form.
+        // I cant be bothered to update this test to keep track of the chagnes I make to the module.
+        trait PackageProcessing<T> {
+            fn process(&self, data: Vec<T>) -> Vec<T>;
+        }
+        struct Mail<T: Clone + Send + Sync> {
+            pub outbound: Sender<Vec<T>>,
+            pub inbound: Receiver<Vec<T>>
+        } impl<T> Mail<T> where T: Clone + Send + Sync {
+            pub fn new() -> Mail<T> {
+                let (tx,rx): (Sender<Vec<T>>, Receiver<Vec<T>>) = mpsc::channel();
+                Mail { outbound: tx, inbound: rx }
+            }
+        }
+
+        pub struct WorkSite<T: Clone + Send + Sync + 'static> {
+            worker_pool: ThreadPool,
+            mail: Mail<T>,
+            process: Option<fn(Vec<T>) -> Vec<T>>,
+            packages: Option<Vec<Vec<T>>>,
+        } impl<T> WorkSite<T>  where T: Clone + Send + Sync {
+            pub fn new(worker_count: usize) -> WorkSite<T> {
+                let worker_pool: ThreadPool = ThreadPoolBuilder::new().num_threads(worker_count).build().unwrap();
+                let mail: Mail<T> = Mail::new();
+                WorkSite { worker_pool, mail, process: None, packages: None}
+            }
+
+            pub fn set_project(mut self, process: fn(Vec<T>)->Vec<T>) -> Self {
+                self.process = Some(process);
+                self
+            }
+
+            pub fn stage_packages(mut self, data: Vec<Vec<T>>) -> Self {
+                self.packages = Some(data);
+                self
+            }
+
+            pub fn execute(self) -> Option<Vec<Vec<T>>> {
+                if self.packages.is_none() {
+                    panic!("No packages staged!");
+                } 
+                if self.process.is_none() {
+                    panic!("No package processing function set!");
+                }
+
+                // Worksite preparation 
+                let process: fn(Vec<T>) -> Vec<T> = self.process.unwrap();
+                let packages: Vec<Vec<T>>                = self.packages.clone().unwrap();
+                let package_count: usize                 = packages.len();
+                let outgoing_mailbox: Sender<Vec<T>>     = self.mail.outbound;
+                let inbound_mailbox: Receiver<Vec<T>>    = self.mail.inbound;
+
+                // Start assigning workers to packages
+                for package in packages.iter() {
+
+                    // Give each worker their own reference to their package and mailbox
+                    let worker_local_package: Vec<T> = package.clone();
+                    let worker_local_mailbox: Sender<Vec<T>> = outgoing_mailbox.clone();
+
+                    // Let worker start doing what they do.
+                    self.worker_pool.spawn(move || {
+                        let result: Vec<T> = process(worker_local_package);
+                        worker_local_mailbox.send(result).unwrap();
+                    });
+                } 
+                drop(outgoing_mailbox); // Close the outgoing mailbox signalling all workers are finished.
+
+                // Collect all the package from the workers.
+                let mut packages: Vec<Vec<T>> = Vec::with_capacity(package_count);
+
+                for received_package in inbound_mailbox {
+                    packages.push(received_package);
+                }
+                Some(packages)
+            }
+        }
+        fn process_data(mut data: Vec<AtomicOrdinalPixel>) -> Vec<AtomicOrdinalPixel> {
+            let b4 = data.clone();
+            data.sort();
+            println!("\n[{}]\n\tb({:?})\n\ta({:?})\n", self::current_thread_index().unwrap(), b4, data.clone());
+            data
+        }
+
+        const PACKAGES: usize = 500;
+        const PIXELS_PER_PACKAGE: usize = 300;
+        let cores: usize = num_cpus::get_physical();
+        let worker_count: usize = cores - 1; // Dont consume all the physical cores. Leave some for the rest of us.
+
+        // Generate random data for our worker threads to modify
+        let mut data_pool: Vec<Vec<AtomicOrdinalPixel>> = Vec::with_capacity(PACKAGES);
+        for _ in 0..PACKAGES {
+            let mut package: Vec<AtomicOrdinalPixel> = Vec::with_capacity(PIXELS_PER_PACKAGE);
+            for _ in 0..PIXELS_PER_PACKAGE {
+                let random_pixel: Vec<u8> = rand::thread_rng().sample_iter(Standard).take(4).collect();
+                let random_pixel: AtomicOrdinalPixel = AtomicOrdinalPixel::new(random_pixel);
+                package.push(random_pixel)
+            }
+            data_pool.push(package);
+            
+        }
+        // Set original data to compare against.
+        let original_data: Vec<Vec<AtomicOrdinalPixel>> = data_pool.clone();
+        println!("Pool of Data (pre): {:?}\n", original_data);
+        
+        let worker_site: WorkSite<AtomicOrdinalPixel> = WorkSite::new(worker_count);
+        let results: Vec<Vec<AtomicOrdinalPixel>> = worker_site.set_project(process_data)
+                                                               .stage_packages(data_pool)
+                                                               .execute()
+                                                               .unwrap();
+
+
+        // Print and verify all data was modified by worker threads.
+        println!("Received Vec: {:?}", results);
+        for package in results {
+            let pclone = package.clone();
+
+            // Get the pixel vector from the package. We will use this as a control
+            // and convert it to a Vec<Vec<u8>> and use our Lexigraphical Sort
+            // on it.
+            let mut left: Vec<Vec<u8>> = Vec::with_capacity(pclone.len());
+            for pixel in pclone.iter() {
+                let p = pixel.pixel.lock().unwrap().clone().leak();
+                left.push(p.to_vec());
+            }
+            left.sort_by(|left, right| {
+                // Here we use the same lexigraphical ordering imposed on AtomicOrdinalPixel.
+                let mut ordering: Option<Ordering> = None;
+                for (a,b) in left.iter().zip(right.iter()).rev() {
+                    if a == b { /* Need to check other elements */ continue; } else 
+                    if a < b  { ordering = Some(Ordering::Less);      break; } else 
+                    if a > b  { ordering = Some(Ordering::Greater);   break; }
+                }
+                if ordering.is_none() {
+                    Some(Ordering::Equal);
+                }
+                ordering.unwrap()
+            });
+
+            // Get the pixel vector from the package that we sorted in a worker thread.
+            let mut right: Vec<Vec<u8>> = Vec::with_capacity(package.len());
+            for pixel in package.iter() {
+                let p = pixel.pixel.lock().unwrap().clone().leak();
+                right.push(p.to_vec());
+            }
+
+            assert_eq!(left, right);
+        }
+    }
+
+    fn test_sorted(alist: Vec<AtomicOrdinalPixel>) -> bool {
+
+            let blist = alist.clone();
+
+            // Get the pixel vector from the package. We will use this as a control
+            // and convert it to a Vec<Vec<u8>> and use our Lexigraphical Sort
+            // on it.
+            let mut left: Vec<Vec<u8>> = Vec::with_capacity(blist.len());
+            for pixel in blist.iter() {
+                let p = pixel.pixel.lock().unwrap().clone().leak();
+                left.push(p.to_vec());
+            }
+            left.sort_by(|left, right| {
+                // Here we use the same lexigraphical ordering imposed on AtomicOrdinalPixel.
+                let mut ordering: Option<Ordering> = None;
+                for (a,b) in left.iter().zip(right.iter()).rev() {
+                    if a == b { /* Need to check other elements */ continue; } else 
+                    if a < b  { ordering = Some(Ordering::Less);      break; } else 
+                    if a > b  { ordering = Some(Ordering::Greater);   break; }
+                }
+                if ordering.is_none() {
+                    Some(Ordering::Equal);
+                }
+                ordering.unwrap()
+            });
+
+            // Get the pixel vector from the package that we sorted in a worker thread.
+            let mut right: Vec<Vec<u8>> = Vec::with_capacity(alist.len());
+            for pixel in alist.iter() {
+                let p = pixel.pixel.lock().unwrap().clone().leak();
+                right.push(p.to_vec());
+            }
+
+            left.reverse();
+            left == right
+    }
+    
+    #[test]
+    fn multithread_small_random_pixel_sort() { 
+        const PIXELS: usize = 4;
+        let cores: usize = num_cpus::get_physical();
+        
+
+        // Generate random data for our worker threads to modify
+        let mut pixels: Vec<AtomicOrdinalPixel> = Vec::with_capacity(PIXELS);
+        for _ in 0..PIXELS {
+            let random_pixel: Vec<u8> = rand::thread_rng().sample_iter(Standard).take(4).collect();
+            let random_pixel: AtomicOrdinalPixel = AtomicOrdinalPixel::new(random_pixel);
+            pixels.push(random_pixel)
+        }
+
+        // Generate the bitonic sorting network
+        let mut sorting_network = bitonic::network::Network::new(PIXELS);
+        let sorting_network = sorting_network.set_input_length(PIXELS).set_comparitors();
+        let network = sorting_network.clone();
+
+        let pixels_sorted = network.sort_multithreaded(pixels.clone().leak()).unwrap();
+        assert_eq!(test_sorted(pixels_sorted.to_vec()), true);
+    }
+
 
     #[test]
     fn simple_group_sort_random() {
@@ -1274,6 +1655,73 @@ mod sorting {
         ];
         for tv in test_vectors.iter_mut() {
             tv.sort();
+            assert_eq!(*tv, ev);
+        }
+    }
+
+    /// Rely only on norm ordering of the vector space.
+    #[test]
+    fn weak_ordering_atomic() {
+        let p0: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![255,   0,   0,   0] );
+        let p1: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![255, 255,   0,   0] ); 
+        let p2: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![255, 255, 255,   0] );
+        let p3: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![255, 255, 255, 255] );
+        let ev = vec![&p0, &p1, &p2, &p3];
+        
+        let mut test_vectors = vec![
+            vec![&p0, &p1, &p2, &p3],
+            vec![&p1, &p2, &p3, &p0],
+            vec![&p2, &p3, &p0, &p1],
+            vec![&p3, &p0, &p1, &p2],
+            vec![&p3, &p2, &p1, &p0],
+            vec![&p2, &p1, &p0, &p3],
+            vec![&p1, &p0, &p3, &p2],
+            vec![&p0, &p3, &p2, &p1],
+            vec![&p0, &p2, &p1, &p3],
+            vec![&p2, &p1, &p3, &p0],
+            vec![&p1, &p3, &p0, &p2],
+            vec![&p3, &p0, &p2, &p1],
+            vec![&p1, &p0, &p2, &p3],
+            vec![&p0, &p2, &p3, &p1],
+            vec![&p2, &p3, &p1, &p0],
+            vec![&p3, &p1, &p0, &p2],
+        ];
+        for tv in test_vectors.iter_mut() {
+            tv.sort();
+            assert_eq!(*tv, ev);
+        }
+    }
+
+    /// Rely only on lexigraphical ordering of the vector space.
+    #[test]
+    fn strong_ordering_atomic() {
+        let p0: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![255,   0,   0,   0] );
+        let p1: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![0  , 255,   0,   0] ); 
+        let p2: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![0  ,   0, 255,   0] );
+        let p3: AtomicOrdinalPixel = AtomicOrdinalPixel::from( vec![0  ,   0,   0, 255] );
+        let ev = vec![&p0, &p1, &p2, &p3];
+        
+        let mut test_vectors = vec![
+            vec![&p0, &p1, &p2, &p3],
+            vec![&p1, &p2, &p3, &p0],
+            vec![&p2, &p3, &p0, &p1],
+            vec![&p3, &p0, &p1, &p2],
+            vec![&p3, &p2, &p1, &p0],
+            vec![&p2, &p1, &p0, &p3],
+            vec![&p1, &p0, &p3, &p2],
+            vec![&p0, &p3, &p2, &p1],
+            vec![&p0, &p2, &p1, &p3],
+            vec![&p2, &p1, &p3, &p0],
+            vec![&p1, &p3, &p0, &p2],
+            vec![&p3, &p0, &p2, &p1],
+            vec![&p1, &p0, &p2, &p3],
+            vec![&p0, &p2, &p3, &p1],
+            vec![&p2, &p3, &p1, &p0],
+            vec![&p3, &p1, &p0, &p2],
+        ];
+        for tv in test_vectors.iter_mut() {
+            tv.sort();
+            //tv.reverse();
             assert_eq!(*tv, ev);
         }
     }
@@ -1583,6 +2031,29 @@ mod ordinality {
                 }
             }
         }
+    }
+
+    #[test]
+    fn lexographic_norm_atomic() {
+        for i in 0..MAX_SCALAR {
+            for j in 0..MAX_SCALAR {
+                for k in 0..MAX_SCALAR {
+
+                    let p1 = AtomicOrdinalPixel::from( vec![i, j, k ]); 
+                    let p2 = AtomicOrdinalPixel::from( vec![i, j, k + 1] );
+                    assert!( p1 < p2);
+
+                    let p1 = AtomicOrdinalPixel::from( vec![i, j, k ]); 
+                    let p2 = AtomicOrdinalPixel::from( vec![i, j + 1, k] );
+                    assert!( p1 < p2);
+
+                    let p1 = AtomicOrdinalPixel::from( vec![i, j, k ]); 
+                    let p2 = AtomicOrdinalPixel::from( vec![i + 1, j, k] );
+                    assert!( p1 < p2);
+                }
+            }
+        }
+
     }
     
 }
